@@ -1,13 +1,31 @@
 {
   "object": "list",
-  "captured_at": "2026-01-01T00:00:00Z",
+  "captured_at": "2026-08-05T04:50:06Z",
   "data": [
-    {"id": "gpt-4-0613", "object": "model", "owned_by": "openai"},
-    {"id": "gpt-4o", "object": "model", "owned_by": "openai"},
-    {"id": "gpt-4o-mini", "object": "model", "owned_by": "openai"},
-    {"id": "gpt-4-turbo", "object": "model", "owned_by": "openai"},
-    {"id": "gpt-3.5-turbo", "object": "model", "owned_by": "openai"},
-    {"id": "gpt-3.5-turbo-0301", "object": "model", "owned_by": "openai"},
-    {"id": "text-embedding-3-small", "object": "model", "owned_by": "openai"}
+    {
+      "id": "gpt-4o",
+      "object": "model",
+      "owned_by": "openai"
+    },
+    {
+      "id": "gpt-4o-mini",
+      "object": "model",
+      "owned_by": "openai"
+    },
+    {
+      "id": "gpt-4-turbo",
+      "object": "model",
+      "owned_by": "openai"
+    },
+    {
+      "id": "gpt-3.5-turbo",
+      "object": "model",
+      "owned_by": "openai"
+    },
+    {
+      "id": "text-embedding-3-small",
+      "object": "model",
+      "owned_by": "openai"
+    }
   ]
 }
