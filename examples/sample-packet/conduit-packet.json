@@ -1,0 +1,36 @@
+{
+  "packet_id": "openai-0.28.1-1.0.0",
+  "package": "openai",
+  "ecosystem": "pypi",
+  "from_version": "0.28.1",
+  "to_version": "1.0.0",
+  "sources": [
+    {
+      "url": "https://platform.openai.com/docs/deprecations",
+      "kind": "docs"
+    }
+  ],
+  "notes": "Sample vendor Migration Packet for the demo-consumer (model + param renames).",
+  "rules": [
+    {
+      "type": "EXACT_STRING_REPLACE",
+      "target_files": ["*.py", "*.ts", "*.js", "*.yaml", "*.yml", "*.json", ".env*"],
+      "match": "gpt-4-0613",
+      "replace": "gpt-4o"
+    },
+    {
+      "type": "AST_PARAM_RENAME",
+      "target_files": ["*.py", "*.ts", "*.js"],
+      "function_target": "chat.completions.create",
+      "old_param": "max_tokens",
+      "new_param": "max_completion_tokens"
+    },
+    {
+      "type": "DEPENDENCY_BUMP",
+      "package": "openai",
+      "from_version": "0.28.1",
+      "to_version": "1.0.0",
+      "ecosystems": ["pip", "pyproject"]
+    }
+  ]
+}

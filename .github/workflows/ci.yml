@@ -1,0 +1,24 @@
+name: Conduit CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          pip install -e "./conduit[dev,llm]"
+          pip install pytest
+      - name: Unit tests
+        run: pytest -q conduit/tests
+      - name: Offline demo apply
+        run: |
+          conduit apply --path ./examples/demo-consumer --packet ./examples/sample-packet/conduit-packet.json --dry-run

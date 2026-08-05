@@ -1,0 +1,64 @@
+name: Conduit
+description: Detect dependency/API breaks, apply Migration Packets, verify, and open PRs
+author: Conduit
+
+inputs:
+  path:
+    description: Repository path to scan
+    required: false
+    default: "."
+  base-ref:
+    description: Git ref for lockfile diff (e.g. origin/main)
+    required: false
+    default: ""
+  package:
+    description: Package filter (e.g. openai)
+    required: false
+    default: ""
+  packet:
+    description: Optional path to conduit-packet.json
+    required: false
+    default: ""
+  skip-pr:
+    description: Apply patches and run tests without opening a PR
+    required: false
+    default: "false"
+  python-version:
+    description: Python version for the action runner
+    required: false
+    default: "3.11"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install Conduit
+      shell: bash
+      run: |
+        pip install -e "${{ github.action_path }}[llm,dev]"
+
+    - name: Run Conduit
+      shell: bash
+      env:
+        OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        ARGS=(run --path "${{ inputs.path }}")
+        if [ -n "${{ inputs.base-ref }}" ]; then
+          ARGS+=(--base-ref "${{ inputs.base-ref }}")
+        fi
+        if [ -n "${{ inputs.package }}" ]; then
+          ARGS+=(--package "${{ inputs.package }}")
+        fi
+        if [ -n "${{ inputs.packet }}" ]; then
+          ARGS+=(--packet "${{ inputs.packet }}")
+        fi
+        if [ "${{ inputs.skip-pr }}" = "true" ]; then
+          ARGS+=(--skip-pr)
+        fi
+        conduit "${ARGS[@]}"

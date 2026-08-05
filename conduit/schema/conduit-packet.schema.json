@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/xlor1009/conduit/main/schema/conduit-packet.schema.json",
+  "title": "ConduitMigrationPacket",
+  "description": "Migration Packet: AST/string codemod rules for a package version jump.",
+  "type": "object",
+  "required": ["packet_id", "package", "ecosystem", "from_version", "to_version", "rules"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "packet_id": { "type": "string", "minLength": 1 },
+    "package": { "type": "string", "minLength": 1 },
+    "ecosystem": {
+      "type": "string",
+      "enum": ["pypi", "npm", "go", "other"]
+    },
+    "from_version": { "type": "string" },
+    "to_version": { "type": "string" },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["url", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "url": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["github_release", "changelog", "docs", "openapi", "other"]
+          }
+        }
+      }
+    },
+    "notes": { "type": ["string", "null"] },
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rule" }
+    }
+  },
+  "$defs": {
+    "rule": {
+      "oneOf": [
+        { "$ref": "#/$defs/exact_string_replace" },
+        { "$ref": "#/$defs/regex_replace" },
+        { "$ref": "#/$defs/ast_param_rename" },
+        { "$ref": "#/$defs/dependency_bump" },
+        { "$ref": "#/$defs/ast_import_rewrite" }
+      ]
+    },
+    "exact_string_replace": {
+      "type": "object",
+      "required": ["type", "target_files", "match", "replace"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "EXACT_STRING_REPLACE" },
+        "target_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "match": { "type": "string" },
+        "replace": { "type": "string" }
+      }
+    },
+    "regex_replace": {
+      "type": "object",
+      "required": ["type", "target_files", "pattern", "replace"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "REGEX_REPLACE" },
+        "target_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "pattern": { "type": "string" },
+        "replace": { "type": "string" }
+      }
+    },
+    "ast_param_rename": {
+      "type": "object",
+      "required": [
+        "type",
+        "target_files",
+        "function_target",
+        "old_param",
+        "new_param"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "AST_PARAM_RENAME" },
+        "target_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "function_target": { "type": "string" },
+        "old_param": { "type": "string" },
+        "new_param": { "type": "string" }
+      }
+    },
+    "dependency_bump": {
+      "type": "object",
+      "required": ["type", "package", "from_version", "to_version"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "DEPENDENCY_BUMP" },
+        "package": { "type": "string" },
+        "from_version": { "type": "string" },
+        "to_version": { "type": "string" },
+        "ecosystems": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["pip", "npm", "pyproject"]
+          }
+        }
+      }
+    },
+    "ast_import_rewrite": {
+      "type": "object",
+      "required": ["type", "target_files", "old_import", "new_import"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "AST_IMPORT_REWRITE" },
+        "target_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "old_import": { "type": "string" },
+        "new_import": { "type": "string" }
+      }
+    }
+  }
+}

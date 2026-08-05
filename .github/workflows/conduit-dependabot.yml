@@ -1,0 +1,40 @@
+name: Conduit Dependabot Intercept
+
+on:
+  pull_request:
+    paths:
+      - "**/requirements*.txt"
+      - "**/pyproject.toml"
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "**/poetry.lock"
+      - "**/go.mod"
+
+jobs:
+  migrate:
+    if: github.actor == 'dependabot[bot]' || github.actor == 'renovate[bot]' || contains(github.event.pull_request.labels.*.name, 'conduit')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Conduit
+        run: pip install -e "./conduit[llm,dev]"
+      - name: Run Conduit on PR diff
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          conduit run \
+            --path . \
+            --base-ref "origin/${{ github.base_ref }}" \
+            --skip-pr
+        # Consumers typically open a follow-up PR; skip-pr keeps the Dependabot branch patched in CI sandbox.
+        # Set skip-pr false and push permissions when applying directly.

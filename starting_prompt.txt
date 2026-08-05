@@ -1,142 +1,80 @@
-Markdown
-# SYSTEM PROMPT: Build the "Vendor Signal Monitoring & Patch Engine" (Self-Updating APIs)
+# System Prompt: Build `Conduit` Open-Source Engine (Autonomous CLI Edition)
 
-## SYSTEM OVERVIEW & GOAL
-Build an open-source, automated API maintenance system ("Dependabot for API Breaking Changes & Model Deprecations"). 
-The system operates on a **Static Community Registry Architecture (Approach A)** with a **Hybrid Enterprise Opt-In Mode**:
-1. A central, serverless cron job fetches upstream vendor changes (OpenAI, Stripe, etc.), standardizes them into a unified `registry.json` file, and publishes it to GitHub Pages/CDN.
-2. A downstream CLI / GitHub Action runs inside consumer codebases. It fetches `registry.json`, performs AST/regex scans for deprecated patterns or model IDs, applies codemods/patches, runs local test suites, and opens fully passing Pull Requests.
+## Executive Summary & Mission
+You are building `Conduit` (`xlor1009/conduit`), an open-source, self-hosted CLI tool that automatically performs breaking API updates in consumer repositories.
 
----
-
-## IMPLEMENTATION STEPS
-
-### STEP 1: Implement the 5 Central Signal Ingestion Workers
-Create modular worker scripts inside the central registry repo (`vendor-signal-registry`):
-
-1. **`OpenAPIDiffWorker`**:
-   - Clone / fetch the official target vendor OpenAPI repo (e.g., `github.com/openai/openai-openapi`).
-   - Run `oasdiff` against the latest commit or release tag vs. the previous tag.
-   - Extract removed endpoints, renamed query/body parameters, and modified schema types.
-
-2. **`DeprecationScraperWorker`**:
-   - Scrape HTML/JSON from `platform.openai.com/docs/deprecations` (or equivalent vendor pages).
-   - Extract structured metadata: `legacy_pattern` (e.g., `"gpt-4-0613"`), `replacement_pattern` (e.g., `"gpt-4o"`), `shutdown_date` (e.g., `"2026-10-23"`), and `severity` (`CRITICAL` vs. `WARNING`).
-
-3. **`ModelPollingWorker`**:
-   - Issue a scheduled `GET https://api.openai.com/v1/models` request using a free/low-cost central API key.
-   - Compare the current model list against the previous state snapshot (`.models-snapshot.json`).
-   - Flag models that disappeared or were newly marked as deprecated without explicit changelog entries.
-
-4. **`ChangelogParserWorker`**:
-   - Fetch RSS/Atom feeds and HTML changelogs (e.g., OpenAI Developer Changelog).
-   - Pass raw text blocks to a fast LLM parser (e.g., `gpt-4o-mini`) to extract signature changes (e.g., `max_tokens` -> `max_completion_tokens`).
-
-5. **`SDKReleaseWorker`**:
-   - Listen to release webhooks/tags on official client SDKs (e.g., `openai/openai-python`, `openai/openai-node`).
-   - Detect major semver version bumps or `-rc` tags (e.g., `v0.x` -> `v1.0` major architectural migrations).
+Instead of relying on a centralized static packet registry, Conduit operates as a fully autonomous agent. When `conduit run` is executed:
+1. It inspects version jumps in local dependency manifests.
+2. It dynamically scrapes external vendor migration context (changelogs, GitHub releases, docs). (It can also be given the changelogs, release, docs so a user can create a Migration Packet)
+3. It synthesizes a temporary or locally-cached Migration Packet (`conduit-packet.json`) containing AST codemod rules.
+4. It applies AST structural transforms and runs a local test-verification and LLM self-correction loop against native unit tests (`pytest`, `npm test`).
+5. It opens a fully verified Pull Request.
 
 ---
 
-### STEP 2: Standardize Events into `registry.json`
-Normalize all worker outputs into a single unified JSON schema:
+## E2E Execution Flow
 
-```json
-{
-  "$schema": "[https://raw.githubusercontent.com/your-org/vendor-signals/main/schema.json](https://raw.githubusercontent.com/your-org/vendor-signals/main/schema.json)",
-  "generated_at": "2026-08-04T12:00:00Z",
-  "version": "1.0.0",
-  "events": [
-    {
-      "event_id": "evt_openai_model_deprecation_001",
-      "vendor": "openai",
-      "change_type": "MODEL_DEPRECATION",
-      "severity": "CRITICAL",
-      "affected_pattern": "gpt-4-0613",
-      "replacement_pattern": "gpt-4o",
-      "deadline": "2026-10-23T00:00:00Z",
-      "rules": [
-        {
-          "type": "EXACT_STRING_REPLACE",
-          "target_files": ["*.py", "*.ts", "*.js", "*.yaml", "*.json", ".env*"],
-          "match": "gpt-4-0613",
-          "replace": "gpt-4o"
-        },
-        {
-          "type": "AST_PARAM_RENAME",
-          "target_files": ["*.py", "*.ts"],
-          "function_target": "openai.chat.completions.create",
-          "old_param": "max_tokens",
-          "new_param": "max_completion_tokens"
-        }
-      ]
-    }
-  ]
-}
-STEP 3: Central Registry Build & Distribution Pipeline
-Set up a GitHub Actions workflow in the central registry repo scheduled to run every 6 hours (cron: '0 */6 * * *').
+1. [Detect Diffs in API Repo + other sources(ie: changelogs,docs)]
+   - Parse package.json, requirements.txt, pyproject.toml, go.mod.
+   - Identify upgraded SDKs (e.g., openai v0.28.0 -> v1.0.0).
+	1. Lockfile Git Diff (Dependency Isolation)
 
-Execute all 5 workers, validate the output against schema.json, and generate the fresh registry.json artifact.
+	Conduit checks git changes on manifest/lockfiles (package-lock.json, poetry.lock, requirements.txt).
 
-Commit and publish registry.json to GitHub Pages / static CDN endpoint (https://your-org.github.io/vendor-signals/registry.json).
+	If 50 dependencies exist but only openai changed from 0.28.0 to 1.0.0, Tier 1 ignores the other 49 packages entirely.
 
-STEP 4: Build Downstream Scanner CLI / GitHub Action
-Develop a lightweight local CLI tool (vendor-patch-cli) that runs inside target repositories:
+	2. Fast String/Regex Pre-Filtering (File Pruning)
 
-Execution Modes:
+	Before building AST trees for your project, Conduit runs a lightweight ripgrep-style text search across the repo.
 
-Default Mode (Approach A): Download https://your-org.github.io/vendor-signals/registry.json over HTTP.
+	It checks for basic import statements matching the changed package (e.g., import .* from ['"]openai['"] or from openai import).
 
-Hybrid Opt-In Mode (Approach B): If --custom-endpoint <url> is passed, bypass the remote central registry and query an internal/on-premise gateway endpoint directly (e.g. http://internal-gateway/v1/models).
+	Files without those import strings are instantly dropped. If only 3 files out of 500 import openai, only those 3 files move forward.
 
-Codebase Scanning Engine:
+	3. Package Export Delta (Package-Only Scope)
 
-Parse project files (.py, .ts, .js, .env*, .yaml).
+	Conduit compares the exported type/API declarations (.d.ts files, __all__, or type stubs) between openai@0.28.0 and openai@1.0.0.
 
-Use AST parsers (tree-sitter or native language AST tools) combined with regex line scanners to locate occurrences of affected_pattern.
+	It extracts only the specific symbols that were renamed, removed, or changed in that single package update.
 
-Filter out false positives by verifying import contexts (e.g. confirming the string is used in an OpenAI client context or API config setting).
+	4. Hard Directory Exclusions
 
-STEP 5: Build Code Modder & Patch Engine
-When a matching deprecation/breaking change is found in the target repository:
+	Tier 1 strictly ignores node_modules/, vendor/, dist/, .git/, and build artifacts by default.
 
-Simple Replacements: Execute exact string & regex replacements for model IDs, environment variables, and config keys.
+	The Resulting Execution Pipeline
+	[ Git Diff on Lockfile ] ──► Identifies 1 updated package (e.g., `openai`)
+			   │
+			   ▼
+	[ Fast Grep Pre-filter ] ──► Prunes repo from 500 files down to 3 matching files
+			   │
+			   ▼
+	[ Export Delta Check ]   ──► Extracts changed API symbols for `openai`
+			   │
+			   ▼
+	[ Pass to Tier 2 ]       ──► Builds AST ONLY for those 3 files and symbols
+	
+1.1 [Autonomous Migration Packet Synthesis]
+   - Check local cache (`./.conduit/packets/`) for an existing packet.
+   - If missing:
+     a. Fetch external context via GitHub Release API or web doc search for target package & version jump.
+     b. Prompt the local/configured LLM to generate a `conduit-packet.json` schema containing AST transformation patterns and migration rules.
+     c. Cache the generated `conduit-packet.json` to `.conduit/packets/`.
 
-AST Codemods: Execute structural refactoring (e.g., renaming function parameters or transforming global static calls to instantiated SDK client instances).
+2. [Deterministic AST Refactoring Engine in Client Repo]
+   - Parse project files and apply the synthesized AST codemod rules (e.g. updating imports, instantiating client objects, updating call chains) from the conduit package created from step 1.1.
 
-Dependency Updates: Update package.json / requirements.txt / pyproject.toml if an SDK version bump is required.
+4. [Native Test Suite Execution]
+   - Detect test runner (`pytest`, `npm test`, `jest`, `go test`).
+   - Run existing test + create new if needed. 
+   - Run native test suite. If all pass -> Skip to PR Generation.
 
-STEP 6: Test Verification & Self-Correction Agent
-Automatically run the project's native unit/integration test suite (pytest, npm test, jest, go test).
+5. [LLM Self-Correction Loop]
+   - If tests fail, capture error stack traces and failing source files.
+   - Send code + trace + packet context to LLM (OpenAI, Anthropic, or local Ollama).
+   - Apply generated patch and re-run tests (up to 5 retries).
 
-If tests pass: Proceed directly to PR generation.
+6. [Git Branching & PR Generation]
+   - Stage changes, commit to branch `conduit/upgrade-{package}-{version}`, and open PR with execution logs.
 
-If tests fail:
 
-Capture stdout / stderr error traces.
-
-Pass the failing test code, error log, and the registry.json migration rule context to a lightweight LLM agent.
-
-Let the LLM adjust test mocks, fixture data, or response structure assertions to match the updated API spec.
-
-Re-run tests (up to 3 retry loops).
-
-STEP 7: PR Generation Module
-When all tests pass, stage the modified files, create a new branch (auto-fix/openai-migration-<event_id>), push, and open a Pull Request:
-
-Title: [Auto-Fix] Migrate deprecated OpenAI model "gpt-4-0613" -> "gpt-4o"
-
-Body Template:
-
-Markdown
-## 🤖 Automatic API Patch
-**Vendor:** OpenAI
-**Upstream Change:** Model `gpt-4-0613` is sunsetting on **2026-10-23**.
-
-### Changes Applied:
-- Replaced string literal `"gpt-4-0613"` with `"gpt-4o"` across 3 files.
-- Renamed parameter `max_tokens` -> `max_completion_tokens` in `src/ai_client.py`.
-
-### Verification:
-- ✅ Unit Tests Executed: Passed (14/14 tests)
-- 📄 Upstream Documentation: [OpenAI Deprecations Page](https://platform.openai.com/docs/depr
+1. Trigger Mechanisms: How Version Jumps Are DetectedA. Scheduled Cron Scans (Passive Polling)Mechanism: A recurring background job (e.g., GitHub Action running nightly at 00:00 UTC or a CLI cron task) executes across target repositories.Workflow:Pulls the latest target branch (main/master).Parses dependency manifests (package.json, requirements.txt, pyproject.toml) and lockfiles (package-lock.json, poetry.lock).Queries package registries (npm, PyPI) or the Central Migration Registry to check if installed versions lag behind target breaking releases.B. CI/CD Pipeline Intercepts (Dependabot / Renovate Layering)Mechanism: Intercepts version bumps inside existing CI/CD pipelines when Dependabot or Renovate opens a PR.Workflow:Dependabot bumps a package across a major breaking boundary (e.g., openai 0.28.0 $\to$ 1.0.0) and CI fails.Conduit triggers on the PR event, inspects the lockfile diff, identifies the major version jump, and immediately executes AST co

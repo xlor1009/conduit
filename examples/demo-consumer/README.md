@@ -1,12 +1,10 @@
-# Demo Consumer
+# Demo consumer
 
-Intentionally outdated OpenAI client usage for end-to-end demos of `vendor-patch`.
+Tiny Python app still using legacy OpenAI patterns (`gpt-4-0613`, `max_tokens`, `openai==0.28.1`) so Conduit can migrate it.
 
 ```bash
-pip install -e ../../vendor-patch-cli
-pip install pytest openai
-vendor-patch run \
-  --path . \
-  --registry-url ../../vendor-signal-registry/dist/registry.json \
-  --skip-pr
+pip install -e "../../conduit[dev]"
+pip install pytest
+
+conduit run --path . --packet ../../examples/sample-packet/conduit-packet.json --skip-pr
 ```

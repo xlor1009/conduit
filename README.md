@@ -1,95 +1,94 @@
-# Conduit — Vendor Signal Monitoring & Patch Engine
+# Conduit
 
-Open-source, automated API maintenance ("Dependabot for API Breaking Changes & Model Deprecations").
+Open-source, self-hosted CLI that performs breaking API updates in consumer repositories.
 
-## Architecture
+When you run `conduit run`:
 
-**Approach A — Static Community Registry**
-
-1. Central workers in `vendor-signal-registry/` ingest OpenAPI diffs, deprecation pages, model lists, changelogs, and SDK releases.
-2. Signals are normalized into `registry.json` (see [`schema.json`](schema.json)).
-3. A GitHub Actions cron (`0 */6 * * *`) rebuilds and publishes the file to GitHub Pages:
-   `https://your-org.github.io/vendor-signals/registry.json`
-
-**Approach B — Hybrid Enterprise Opt-In**
-
-Consumer CI passes `--custom-endpoint <url>` to bypass the public CDN and query an internal gateway.
-
-Downstream `vendor-patch-cli` scans repos, applies codemods, runs tests (with optional LLM self-correction), and opens PRs.
+1. **Detect** — lockfile/manifest git diffs plus pluggable vendor **detect modules** (e.g. `openai`)
+2. **Prune** — ripgrep-style import filter so only relevant files are touched
+3. **Packet** — load or synthesize a Migration Packet (`conduit-packet.json`)
+4. **Apply** — deterministic AST/string codemods
+5. **Verify** — native tests (`pytest` / `npm test` / `go test`) with LLM self-correction (up to 5 retries)
+6. **PR** — branch `conduit/upgrade-{package}-{version}` and open a pull request
 
 ```text
-vendor-signal-registry  --(cron)-->  registry.json (Pages/CDN)
-                                           |
-                                           v
-consumer repo  <-- vendor-patch scan/apply/run (GitHub Action)
+Lockfile diff + vendor modules  →  ChangeSignals
+        ↓
+Import prune  →  Migration Packet (cache or synth)
+        ↓
+AST apply  →  tests / self-correct  →  PR
 ```
-
-## Packages
-
-| Path | Role |
-|------|------|
-| [`vendor-signal-registry/`](vendor-signal-registry/) | 5 ingestion workers + pipeline + Pages artifact |
-| [`vendor-patch-cli/`](vendor-patch-cli/) | Scanner, patch engine, test verifier, PR generator |
-| [`examples/demo-consumer/`](examples/demo-consumer/) | Tiny Python app still on `gpt-4-0613` for demos |
 
 ## Quick start
 
 ```bash
-# 1. Build the central registry (fixture / offline mode)
-pip install -e ./vendor-signal-registry
-python -m vendor_signal_registry.pipeline build
+pip install -e "./conduit[llm,dev]"
 
-# 2. Install the consumer CLI
-pip install -e ./vendor-patch-cli
-pip install pytest
+# Detect signals (modules use offline fixtures by default)
+conduit detect --path ./examples/demo-consumer --module openai
 
-# 3. Scan the demo consumer against the local registry
-vendor-patch scan \
-  --path ./examples/demo-consumer \
-  --registry-url ./vendor-signal-registry/dist/registry.json
+# Apply the sample vendor packet (dry-run)
+conduit apply --path ./examples/demo-consumer \
+  --packet ./examples/sample-packet/conduit-packet.json --dry-run
 
-# 4. Full local run (patch + tests + self-correct, no PR)
-vendor-patch run \
-  --path ./examples/demo-consumer \
-  --registry-url ./vendor-signal-registry/dist/registry.json \
-  --vendor openai \
-  --skip-pr
+# Full local run without opening a PR
+conduit run --path ./examples/demo-consumer \
+  --packet ./examples/sample-packet/conduit-packet.json --skip-pr
 ```
 
-## Workers (registry)
-
-| Worker | Purpose | Live flags |
-|--------|---------|------------|
-| `OpenAPIDiffWorker` | Diff OpenAPI specs for removed paths / renamed params | `OASDIFF_LIVE=1` |
-| `DeprecationScraperWorker` | Scrape deprecation tables | `SCRAPE_LIVE=1` |
-| `ModelPollingWorker` | Diff `/v1/models` vs snapshot | `OPENAI_API_KEY`, `UPDATE_MODEL_SNAPSHOT=1` |
-| `ChangelogParserWorker` | Parse RSS/changelog for signature renames | `OPENAI_API_KEY` / `CHANGELOG_LLM=1` |
-| `SDKReleaseWorker` | Detect SDK major / rc bumps | `SDK_RELEASE_LIVE=1`, `GITHUB_TOKEN` |
-
-Fixtures under `vendor-signal-registry/fixtures/` keep CI deterministic without secrets.
-
-## CLI modes
+## Author a detect module
 
 ```bash
-# Approach A
-vendor-patch run --registry-url https://your-org.github.io/vendor-signals/registry.json
-
-# Approach B
-vendor-patch run --custom-endpoint http://internal-gateway/v1/signals
+conduit module new stripe --package stripe --path ./conduit
+conduit module list
 ```
 
-## Environment
+External packages can register via entry point group `conduit.detect_modules`.
 
-| Variable | Used by |
-|----------|---------|
-| `OPENAI_API_KEY` | Model polling, changelog LLM parse, test self-correction |
-| `GITHUB_TOKEN` | Live SDK release lookups / `gh pr create` |
-| `OASDIFF_LIVE` / `SCRAPE_LIVE` / `SDK_RELEASE_LIVE` | Enable live network paths |
+## Author a Migration Packet (vendors)
+
+```bash
+conduit packet init --package openai --from 0.28.0 --to 1.0.0 --out ./my-packet
+conduit packet synthesize --package openai --from 0.28.0 --to 1.0.0 \
+  --changelog ./CHANGELOG.md --docs ./MIGRATION.md --out ./my-packet/conduit-packet.json
+conduit packet validate ./my-packet/conduit-packet.json
+```
+
+Schema: [`schema/conduit-packet.schema.json`](schema/conduit-packet.schema.json)
+
+Consumers load packets with `--packet` or by dropping them into `.conduit/packets/`.
 
 ## GitHub Actions
 
-- Registry build + Pages: [`.github/workflows/build-registry.yml`](.github/workflows/build-registry.yml)
-- Consumer composite action: [`vendor-patch-cli/action.yml`](vendor-patch-cli/action.yml)
+| Workflow | Purpose |
+|----------|---------|
+| [`ci.yml`](.github/workflows/ci.yml) | Unit tests + dry-run apply |
+| [`conduit-dependabot.yml`](.github/workflows/conduit-dependabot.yml) | Intercept Dependabot/Renovate lockfile PRs |
+| [`conduit-nightly.yml`](.github/workflows/conduit-nightly.yml) | Nightly lag / module scan |
+| Composite action | [`conduit/action.yml`](conduit/action.yml) |
+
+Secrets: `OPENAI_API_KEY` (optional self-correct / synth), `GITHUB_TOKEN`.
+
+## Layout
+
+| Path | Role |
+|------|------|
+| [`conduit/`](conduit/) | Installable CLI package |
+| [`conduit/src/conduit/detect/`](conduit/src/conduit/detect/) | Orchestrator, lockfile diff, modules |
+| [`conduit/src/conduit/detect/modules/openai/`](conduit/src/conduit/detect/modules/openai/) | OpenAI signal workers |
+| [`schema/`](schema/) | Public packet JSON Schema |
+| [`examples/demo-consumer/`](examples/demo-consumer/) | Demo app on legacy openai patterns |
+| [`examples/sample-packet/`](examples/sample-packet/) | Example vendor packet |
+
+## Post-MVP backlog
+
+1. Package export delta (`.d.ts` / `__all__`)
+2. Multi-provider LLM (Anthropic / Ollama)
+3. Richer AST DSL + real JS/TS AST
+4. Go / multi-ecosystem polish
+5. Generate tests when missing
+6. More built-in vendor modules
+7. `conduit packet publish` / fetch from release URLs
 
 ## License
 
