@@ -1,0 +1,16 @@
+{
+  "repos": {
+    "openai/openai-python": {
+      "previous_tag": "v0.28.1",
+      "latest_tag": "v1.40.0",
+      "package": "openai",
+      "ecosystems": ["pip", "pyproject"]
+    },
+    "openai/openai-node": {
+      "previous_tag": "v3.3.0",
+      "latest_tag": "v4.52.0",
+      "package": "openai",
+      "ecosystems": ["npm"]
+    }
+  }
+}

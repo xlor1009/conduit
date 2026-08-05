@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/your-org/vendor-signals/main/schema.json",
+  "title": "VendorSignalRegistry",
+  "description": "Unified registry of vendor API breaking changes, model deprecations, and SDK migrations.",
+  "type": "object",
+  "required": ["generated_at", "version", "events"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "version": { "type": "string" },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/event" }
+    }
+  },
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": ["CRITICAL", "WARNING", "INFO"]
+    },
+    "change_type": {
+      "type": "string",
+      "enum": [
+        "MODEL_DEPRECATION",
+        "MODEL_REMOVED",
+        "API_BREAKING",
+        "PARAM_RENAME",
+        "SDK_MAJOR_BUMP"
+      ]
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "event_id",
+        "vendor",
+        "change_type",
+        "severity",
+        "affected_pattern",
+        "rules"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "event_id": { "type": "string", "minLength": 1 },
+        "vendor": { "type": "string", "minLength": 1 },
+        "change_type": { "$ref": "#/$defs/change_type" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "affected_pattern": { "type": "string" },
+        "replacement_pattern": { "type": ["string", "null"] },
+        "deadline": { "type": ["string", "null"], "format": "date-time" },
+        "source_url": { "type": ["string", "null"] },
+        "description": { "type": ["string", "null"] },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        }
+      }
+    },
+    "rule": {
+      "oneOf": [
+        { "$ref": "#/$defs/exact_string_replace" },
+        { "$ref": "#/$defs/regex_replace" },
+        { "$ref": "#/$defs/ast_param_rename" },
+        { "$ref": "#/$defs/dependency_bump" }
+      ]
+    },
+    "exact_string_replace": {
+      "type": "object",
+      "required": ["type", "target_files", "match", "replace"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "EXACT_STRING_REPLACE" },
+        "target_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "match": { "type": "string" },
+        "replace": { "type": "string" }
+      }
+    },
+    "regex_replace": {
+      "type": "object",
+      "required": ["type", "target_files", "pattern", "replace"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "REGEX_REPLACE" },
+        "target_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "pattern": { "type": "string" },
+        "replace": { "type": "string" }
+      }
+    },
+    "ast_param_rename": {
+      "type": "object",
+      "required": [
+        "type",
+        "target_files",
+        "function_target",
+        "old_param",
+        "new_param"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "AST_PARAM_RENAME" },
+        "target_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "function_target": { "type": "string" },
+        "old_param": { "type": "string" },
+        "new_param": { "type": "string" }
+      }
+    },
+    "dependency_bump": {
+      "type": "object",
+      "required": ["type", "package", "from_version", "to_version"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "DEPENDENCY_BUMP" },
+        "package": { "type": "string" },
+        "from_version": { "type": "string" },
+        "to_version": { "type": "string" },
+        "ecosystems": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["pip", "npm", "pyproject"]
+          }
+        }
+      }
+    }
+  }
+}

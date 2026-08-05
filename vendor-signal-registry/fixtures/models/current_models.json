@@ -1,0 +1,10 @@
+{
+  "object": "list",
+  "data": [
+    {"id": "gpt-4o", "object": "model", "owned_by": "openai"},
+    {"id": "gpt-4o-mini", "object": "model", "owned_by": "openai"},
+    {"id": "gpt-4-turbo", "object": "model", "owned_by": "openai"},
+    {"id": "gpt-3.5-turbo", "object": "model", "owned_by": "openai"},
+    {"id": "text-embedding-3-small", "object": "model", "owned_by": "openai"}
+  ]
+}

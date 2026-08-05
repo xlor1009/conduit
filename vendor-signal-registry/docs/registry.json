@@ -1,0 +1,227 @@
+{
+  "$schema": "https://raw.githubusercontent.com/your-org/vendor-signals/main/schema.json",
+  "generated_at": "2026-08-05T03:48:00Z",
+  "version": "1.0.0",
+  "events": [
+    {
+      "event_id": "evt_openai_api_breaking_v1_engines_7ed6b7",
+      "vendor": "openai",
+      "change_type": "API_BREAKING",
+      "severity": "CRITICAL",
+      "affected_pattern": "/v1/engines",
+      "rules": [],
+      "source_url": "https://github.com/openai/openai-openapi",
+      "description": "OpenAPI path removed: /v1/engines"
+    },
+    {
+      "event_id": "evt_openai_model_deprecation_gpt_3_5_turbo_0301_91a772",
+      "vendor": "openai",
+      "change_type": "MODEL_DEPRECATION",
+      "severity": "WARNING",
+      "affected_pattern": "gpt-3.5-turbo-0301",
+      "rules": [
+        {
+          "type": "EXACT_STRING_REPLACE",
+          "target_files": [
+            "*.py",
+            "*.ts",
+            "*.js",
+            "*.yaml",
+            "*.yml",
+            "*.json",
+            ".env*"
+          ],
+          "match": "gpt-3.5-turbo-0301",
+          "replace": "gpt-4o-mini"
+        }
+      ],
+      "replacement_pattern": "gpt-4o-mini",
+      "deadline": "2025-09-13T00:00:00Z",
+      "source_url": "https://platform.openai.com/docs/deprecations",
+      "description": "Model gpt-3.5-turbo-0301 deprecated; replace with gpt-4o-mini"
+    },
+    {
+      "event_id": "evt_openai_model_deprecation_gpt_4_0613_64ed69",
+      "vendor": "openai",
+      "change_type": "MODEL_DEPRECATION",
+      "severity": "CRITICAL",
+      "affected_pattern": "gpt-4-0613",
+      "rules": [
+        {
+          "type": "EXACT_STRING_REPLACE",
+          "target_files": [
+            "*.py",
+            "*.ts",
+            "*.js",
+            "*.yaml",
+            "*.yml",
+            "*.json",
+            ".env*"
+          ],
+          "match": "gpt-4-0613",
+          "replace": "gpt-4o"
+        }
+      ],
+      "replacement_pattern": "gpt-4o",
+      "deadline": "2026-10-23T00:00:00Z",
+      "source_url": "https://platform.openai.com/docs/deprecations",
+      "description": "Model gpt-4-0613 deprecated; replace with gpt-4o"
+    },
+    {
+      "event_id": "evt_openai_model_deprecation_gpt_4_0613_c1a2f9",
+      "vendor": "openai",
+      "change_type": "MODEL_DEPRECATION",
+      "severity": "CRITICAL",
+      "affected_pattern": "gpt-4-0613",
+      "rules": [],
+      "deadline": "2026-10-23T00:00:00Z",
+      "source_url": "https://platform.openai.com/docs/deprecations",
+      "description": "Model gpt-4-0613 shutting down 2026-10-23"
+    },
+    {
+      "event_id": "evt_openai_model_deprecation_text_davinci_003_bc8223",
+      "vendor": "openai",
+      "change_type": "MODEL_DEPRECATION",
+      "severity": "CRITICAL",
+      "affected_pattern": "text-davinci-003",
+      "rules": [
+        {
+          "type": "EXACT_STRING_REPLACE",
+          "target_files": [
+            "*.py",
+            "*.ts",
+            "*.js",
+            "*.yaml",
+            "*.yml",
+            "*.json",
+            ".env*"
+          ],
+          "match": "text-davinci-003",
+          "replace": "gpt-3.5-turbo-instruct"
+        }
+      ],
+      "replacement_pattern": "gpt-3.5-turbo-instruct",
+      "deadline": "2024-01-04T00:00:00Z",
+      "source_url": "https://platform.openai.com/docs/deprecations",
+      "description": "Model text-davinci-003 deprecated; replace with gpt-3.5-turbo-instruct"
+    },
+    {
+      "event_id": "evt_openai_model_removed_gpt_3_5_turbo_0301_391bbc",
+      "vendor": "openai",
+      "change_type": "MODEL_REMOVED",
+      "severity": "CRITICAL",
+      "affected_pattern": "gpt-3.5-turbo-0301",
+      "rules": [
+        {
+          "type": "EXACT_STRING_REPLACE",
+          "target_files": [
+            "*.py",
+            "*.ts",
+            "*.js",
+            "*.yaml",
+            "*.yml",
+            "*.json",
+            ".env*"
+          ],
+          "match": "gpt-3.5-turbo-0301",
+          "replace": "gpt-4o-mini"
+        }
+      ],
+      "replacement_pattern": "gpt-4o-mini",
+      "source_url": "https://api.openai.com/v1/models",
+      "description": "Model gpt-3.5-turbo-0301 disappeared from /v1/models (replacement hint: gpt-4o-mini)"
+    },
+    {
+      "event_id": "evt_openai_model_removed_gpt_4_0613_917c80",
+      "vendor": "openai",
+      "change_type": "MODEL_REMOVED",
+      "severity": "CRITICAL",
+      "affected_pattern": "gpt-4-0613",
+      "rules": [
+        {
+          "type": "EXACT_STRING_REPLACE",
+          "target_files": [
+            "*.py",
+            "*.ts",
+            "*.js",
+            "*.yaml",
+            "*.yml",
+            "*.json",
+            ".env*"
+          ],
+          "match": "gpt-4-0613",
+          "replace": "gpt-4o"
+        }
+      ],
+      "replacement_pattern": "gpt-4o",
+      "source_url": "https://api.openai.com/v1/models",
+      "description": "Model gpt-4-0613 disappeared from /v1/models (replacement hint: gpt-4o)"
+    },
+    {
+      "event_id": "evt_openai_param_rename_max_tokens_cef167",
+      "vendor": "openai",
+      "change_type": "PARAM_RENAME",
+      "severity": "CRITICAL",
+      "affected_pattern": "max_tokens",
+      "rules": [
+        {
+          "type": "AST_PARAM_RENAME",
+          "target_files": [
+            "*.py",
+            "*.ts",
+            "*.js"
+          ],
+          "function_target": "openai.chat.completions.create",
+          "old_param": "max_tokens",
+          "new_param": "max_completion_tokens"
+        }
+      ],
+      "replacement_pattern": "max_completion_tokens",
+      "source_url": "https://github.com/openai/openai-openapi",
+      "description": "Request property renamed on /v1/chat/completions: max_tokens -> max_completion_tokens"
+    },
+    {
+      "event_id": "evt_openai_sdk_major_bump_openai_a8f309",
+      "vendor": "openai",
+      "change_type": "SDK_MAJOR_BUMP",
+      "severity": "CRITICAL",
+      "affected_pattern": "openai",
+      "rules": [
+        {
+          "type": "DEPENDENCY_BUMP",
+          "package": "openai",
+          "from_version": "0.28.1",
+          "to_version": "1.40.0",
+          "ecosystems": [
+            "pip",
+            "pyproject"
+          ]
+        }
+      ],
+      "replacement_pattern": "1.40.0",
+      "source_url": "https://github.com/openai/openai-python/releases/tag/v1.40.0",
+      "description": "SDK openai/openai-python bumped v0.28.1 -> v1.40.0"
+    },
+    {
+      "event_id": "evt_openai_sdk_major_bump_openai_b0f398",
+      "vendor": "openai",
+      "change_type": "SDK_MAJOR_BUMP",
+      "severity": "CRITICAL",
+      "affected_pattern": "openai",
+      "rules": [
+        {
+          "type": "DEPENDENCY_BUMP",
+          "package": "openai",
+          "from_version": "3.3.0",
+          "to_version": "4.52.0",
+          "ecosystems": [
+            "npm"
+          ]
+        }
+      ],
+      "replacement_pattern": "4.52.0",
+      "source_url": "https://github.com/openai/openai-node/releases/tag/v4.52.0",
+      "description": "SDK openai/openai-node bumped v3.3.0 -> v4.52.0"
+    }
+  ]
+}

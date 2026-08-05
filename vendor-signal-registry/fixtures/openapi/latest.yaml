@@ -1,0 +1,27 @@
+openapi: 3.0.0
+info:
+  title: OpenAI API (latest)
+  version: "2.0.0"
+paths:
+  /v1/chat/completions:
+    post:
+      operationId: createChatCompletion
+      summary: Creates a model response for the given chat conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model:
+                  type: string
+                max_completion_tokens:
+                  type: integer
+                messages:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "200":
+          description: OK

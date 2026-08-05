@@ -1,0 +1,58 @@
+name: Vendor Patch
+description: Scan a repository against the vendor signal registry and open auto-fix PRs
+author: Conduit
+
+inputs:
+  registry-url:
+    description: Approach A registry.json URL (or local path)
+    required: false
+    default: https://your-org.github.io/vendor-signals/registry.json
+  custom-endpoint:
+    description: Approach B enterprise/on-prem registry endpoint
+    required: false
+    default: ""
+  vendor:
+    description: Vendor filter (e.g. openai)
+    required: false
+    default: openai
+  path:
+    description: Repository path to scan
+    required: false
+    default: "."
+  skip-pr:
+    description: Apply patches and run tests without opening a PR
+    required: false
+    default: "false"
+  python-version:
+    description: Python version for the action runner
+    required: false
+    default: "3.11"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install vendor-patch-cli
+      shell: bash
+      run: |
+        pip install -e "${{ github.action_path }}"
+        pip install pytest
+
+    - name: Run vendor-patch
+      shell: bash
+      env:
+        OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        ARGS=(run --path "${{ inputs.path }}" --vendor "${{ inputs.vendor }}" --registry-url "${{ inputs.registry-url }}")
+        if [ -n "${{ inputs.custom-endpoint }}" ]; then
+          ARGS+=(--custom-endpoint "${{ inputs.custom-endpoint }}")
+        fi
+        if [ "${{ inputs.skip-pr }}" = "true" ]; then
+          ARGS+=(--skip-pr)
+        fi
+        vendor-patch "${ARGS[@]}"

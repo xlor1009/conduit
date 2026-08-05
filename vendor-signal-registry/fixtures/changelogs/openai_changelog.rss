@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>OpenAI Developer Changelog</title>
+    <link>https://platform.openai.com/docs/changelog</link>
+    <item>
+      <title>Chat Completions: max_tokens renamed</title>
+      <description>
+        For newer models, the Chat Completions parameter max_tokens has been
+        renamed to max_completion_tokens. Update openai.chat.completions.create
+        calls accordingly. Legacy models still accept max_tokens.
+      </description>
+      <pubDate>Mon, 01 Jul 2026 12:00:00 GMT</pubDate>
+      <link>https://platform.openai.com/docs/changelog/max-completion-tokens</link>
+    </item>
+    <item>
+      <title>gpt-4-0613 deprecation notice</title>
+      <description>
+        Model gpt-4-0613 will shut down on 2026-10-23. Migrate to gpt-4o.
+      </description>
+      <pubDate>Fri, 15 Jul 2026 09:00:00 GMT</pubDate>
+      <link>https://platform.openai.com/docs/deprecations</link>
+    </item>
+  </channel>
+</rss>
