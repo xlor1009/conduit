@@ -44,7 +44,9 @@
         { "$ref": "#/$defs/regex_replace" },
         { "$ref": "#/$defs/ast_param_rename" },
         { "$ref": "#/$defs/dependency_bump" },
-        { "$ref": "#/$defs/ast_import_rewrite" }
+        { "$ref": "#/$defs/ast_import_rewrite" },
+        { "$ref": "#/$defs/ast_attr_rename" },
+        { "$ref": "#/$defs/ast_call_rewrite" }
       ]
     },
     "exact_string_replace": {
@@ -130,6 +132,36 @@
         },
         "old_import": { "type": "string" },
         "new_import": { "type": "string" }
+      }
+    },
+    "ast_attr_rename": {
+      "type": "object",
+      "required": ["type", "target_files", "old_attr", "new_attr"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "AST_ATTR_RENAME" },
+        "target_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "old_attr": { "type": "string" },
+        "new_attr": { "type": "string" }
+      }
+    },
+    "ast_call_rewrite": {
+      "type": "object",
+      "required": ["type", "target_files", "old_callee", "new_callee"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "AST_CALL_REWRITE" },
+        "target_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "old_callee": { "type": "string" },
+        "new_callee": { "type": "string" }
       }
     }
   }

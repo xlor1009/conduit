@@ -1,94 +1,108 @@
-# Conduit
+<p align="center">
+  <img src="docs/assets/conduit-logo.svg" alt="Conduit" width="420"/>
+</p>
 
-Open-source, self-hosted CLI that performs breaking API updates in consumer repositories.
+<p align="center">
+  <strong>Self-hosted CLI that migrates your code when dependencies make breaking API changes.</strong>
+</p>
 
-When you run `conduit run`:
-
-1. **Detect** — lockfile/manifest git diffs plus pluggable vendor **detect modules** (e.g. `openai`)
-2. **Prune** — ripgrep-style import filter so only relevant files are touched
-3. **Packet** — load or synthesize a Migration Packet (`conduit-packet.json`)
-4. **Apply** — deterministic AST/string codemods
-5. **Verify** — native tests (`pytest` / `npm test` / `go test`) with LLM self-correction (up to 5 retries)
-6. **PR** — branch `conduit/upgrade-{package}-{version}` and open a pull request
+<p align="center">
+  Bump a package. Conduit finds the call sites, applies structural fixes, runs your tests, and opens a PR.
+</p>
 
 ```text
-Lockfile diff + vendor modules  →  ChangeSignals
-        ↓
-Import prune  →  Migration Packet (cache or synth)
-        ↓
-AST apply  →  tests / self-correct  →  PR
+Detect upgrade  →  Prune files  →  Apply migration rules  →  Test / fix  →  Open PR
 ```
+
+<p align="center">
+  📚 <a href="docs/README.md"><strong>Full documentation</strong></a>
+</p>
+
+---
 
 ## Quick start
 
 ```bash
+git clone https://github.com/xlor1009/conduit.git
+cd conduit
 pip install -e "./conduit[llm,dev]"
 
-# Detect signals (modules use offline fixtures by default)
-conduit detect --path ./examples/demo-consumer --module openai
-
-# Apply the sample vendor packet (dry-run)
-conduit apply --path ./examples/demo-consumer \
-  --packet ./examples/sample-packet/conduit-packet.json --dry-run
-
-# Full local run without opening a PR
-conduit run --path ./examples/demo-consumer \
-  --packet ./examples/sample-packet/conduit-packet.json --skip-pr
+conduit run \
+  --path ./examples/demo-consumer \
+  --packet ./examples/sample-packet/conduit-packet.json \
+  --skip-pr
 ```
 
-## Author a detect module
+This **really applies** the sample Migration Packet, runs the demo tests, and skips only PR creation so you can inspect the diff:
 
 ```bash
-conduit module new stripe --package stripe --path ./conduit
-conduit module list
+git -C examples/demo-consumer diff
 ```
 
-External packages can register via entry point group `conduit.detect_modules`.
-
-## Author a Migration Packet (vendors)
+On your own repo:
 
 ```bash
-conduit packet init --package openai --from 0.28.0 --to 1.0.0 --out ./my-packet
-conduit packet synthesize --package openai --from 0.28.0 --to 1.0.0 \
-  --changelog ./CHANGELOG.md --docs ./MIGRATION.md --out ./my-packet/conduit-packet.json
-conduit packet validate ./my-packet/conduit-packet.json
+conduit run --path /path/to/your/repo --package openai
+# or
+conduit run --path /path/to/your/repo --packet ./my-packet/conduit-packet.json
 ```
 
-Schema: [`schema/conduit-packet.schema.json`](schema/conduit-packet.schema.json)
+More: [Getting started](docs/getting-started.md) · [CLI reference](docs/cli-reference.md)
 
-Consumers load packets with `--packet` or by dropping them into `.conduit/packets/`.
+---
 
-## GitHub Actions
+## How it works
 
-| Workflow | Purpose |
-|----------|---------|
-| [`ci.yml`](.github/workflows/ci.yml) | Unit tests + dry-run apply |
-| [`conduit-dependabot.yml`](.github/workflows/conduit-dependabot.yml) | Intercept Dependabot/Renovate lockfile PRs |
-| [`conduit-nightly.yml`](.github/workflows/conduit-nightly.yml) | Nightly lag / module scan |
-| Composite action | [`conduit/action.yml`](conduit/action.yml) |
+| Step | What happens |
+|------|----------------|
+| **Detect** | Lockfile/manifest git diffs + vendor detect modules |
+| **Prune** | Keep files that import the upgraded package |
+| **Export delta** | Compare public APIs between old/new versions |
+| **Packet** | Load or build `conduit-packet.json` rules |
+| **Apply** | Deterministic AST/string codemods (no LLM required) |
+| **Verify** | Native tests + optional LLM self-correct |
+| **PR** | Branch `conduit/upgrade-{package}-{version}` |
 
-Secrets: `OPENAI_API_KEY` (optional self-correct / synth), `GITHUB_TOKEN`.
+Deep dive: [Architecture](docs/architecture.md)
 
-## Layout
+---
 
-| Path | Role |
-|------|------|
-| [`conduit/`](conduit/) | Installable CLI package |
-| [`conduit/src/conduit/detect/`](conduit/src/conduit/detect/) | Orchestrator, lockfile diff, modules |
-| [`conduit/src/conduit/detect/modules/openai/`](conduit/src/conduit/detect/modules/openai/) | OpenAI signal workers |
-| [`schema/`](schema/) | Public packet JSON Schema |
-| [`examples/demo-consumer/`](examples/demo-consumer/) | Demo app on legacy openai patterns |
-| [`examples/sample-packet/`](examples/sample-packet/) | Example vendor packet |
+## LLM (optional)
 
-## Post-MVP backlog
+Packet **apply** never needs an LLM. Configure one only for synthesis, failed-test repair, or smoke-test generation.
 
-1. Package export delta (`.d.ts` / `__all__`)
-2. Multi-provider LLM (Anthropic / Ollama)
-3. Richer AST DSL + real JS/TS AST
-4. Go / multi-ecosystem polish
-5. Generate tests when missing
-6. More built-in vendor modules
-7. `conduit packet publish` / fetch from release URLs
+| Provider | API key? |
+|----------|----------|
+| `openai` / `anthropic` | Yes |
+| `ollama` / `custom` (local server) | **No** |
+
+```bash
+export CONDUIT_LLM_PROVIDER=ollama
+export CONDUIT_LLM_MODEL=llama3.2
+```
+
+Details: [LLM configuration](docs/llm.md)
+
+---
+
+## Docs index
+
+| Topic | Link |
+|-------|------|
+| Getting started | [docs/getting-started.md](docs/getting-started.md) |
+| Architecture | [docs/architecture.md](docs/architecture.md) |
+| Detection | [docs/detection.md](docs/detection.md) |
+| Pruning & export delta | [docs/pruning-and-export-delta.md](docs/pruning-and-export-delta.md) |
+| Migration packets | [docs/migration-packets.md](docs/migration-packets.md) |
+| Codemods | [docs/codemods.md](docs/codemods.md) |
+| LLM | [docs/llm.md](docs/llm.md) |
+| Testing & self-correct | [docs/testing-and-self-correct.md](docs/testing-and-self-correct.md) |
+| Pull requests | [docs/pull-requests.md](docs/pull-requests.md) |
+| Detect modules | [docs/detect-modules.md](docs/detect-modules.md) |
+| GitHub Actions | [docs/github-actions.md](docs/github-actions.md) |
+| CLI reference | [docs/cli-reference.md](docs/cli-reference.md) |
+
+---
 
 ## License
 

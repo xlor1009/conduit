@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import os
 import re
 from typing import Any
 
@@ -75,31 +73,26 @@ def parse_changelog_text(text: str, source_url: str | None = None) -> list[RawSi
 
 
 def _llm_extract(text: str) -> list[RawSignal]:
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not api_key:
-        return []
-    try:
-        from openai import OpenAI
-    except ImportError:
+    from conduit.llm import extract_json_payload, get_llm_client
+
+    client = get_llm_client()
+    if client is None:
         return []
 
-    client = OpenAI(api_key=api_key)
     prompt = (
         "Extract API signature changes from this changelog. "
-        "Return JSON array of objects with keys: "
+        'Return JSON object {"changes": [...]} where each item has keys: '
         "change_type (PARAM_RENAME|MODEL_DEPRECATION), affected_pattern, "
         "replacement_pattern, deadline (ISO8601 or null), description.\n\n"
         f"{text[:6000]}"
     )
     try:
-        resp = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            temperature=0,
+        payload: Any = client.complete_json(
+            system="Extract changelog API changes. JSON only.",
+            user=prompt,
         )
-        content = resp.choices[0].message.content or "{}"
-        payload: Any = json.loads(content)
+        if not payload:
+            payload = extract_json_payload(prompt) or {}
         items = payload if isinstance(payload, list) else payload.get("changes", [])
     except Exception:
         return []
@@ -147,7 +140,9 @@ class ChangelogParserWorker(Worker):
             blobs.append(blob)
             signals.extend(parse_changelog_text(blob, link))
 
-        if env_flag("CHANGELOG_LLM") or os.environ.get("OPENAI_API_KEY"):
+        from conduit.llm import get_llm_client
+
+        if env_flag("CHANGELOG_LLM") or get_llm_client() is not None:
             llm_signals = _llm_extract("\n\n".join(blobs))
             seen = {(s.change_type, s.affected_pattern, s.replacement_pattern) for s in signals}
             for s in llm_signals:

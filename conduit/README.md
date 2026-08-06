@@ -1,6 +1,6 @@
 # Conduit package
 
-Installable CLI for autonomous API migrations. See the [root README](../README.md).
+Installable CLI. See the [root README](../README.md) for quick start and docs.
 
 ```bash
 pip install -e ".[llm,dev]"

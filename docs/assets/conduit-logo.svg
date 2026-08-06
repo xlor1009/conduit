@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" width="100%" height="100%" role="img" aria-label="Conduit">
+  <title>Conduit</title>
+  <text
+    x="40"
+    y="80"
+    font-family="'JetBrains Mono', 'Fira Code', 'Courier New', monospace"
+    font-size="64"
+    font-weight="500"
+    letter-spacing="0"
+  >
+    <tspan fill="#D4CEC5">condu</tspan><tspan dx="-6" fill="#8C7A6B" font-weight="700">|</tspan><tspan dx="-4" fill="#D4CEC5">t</tspan><tspan dx="-4" fill="#8C7A6B">_</tspan>
+  </text>
+</svg>

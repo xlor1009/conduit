@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from conduit.context_filter import file_has_vendor_context
+from conduit.patcher.ast_attr_call import apply_attr_rename, apply_call_rewrite
+from conduit.patcher.ast_import_rewrite import apply_import_rewrite
 from conduit.patcher.ast_param_rename import apply_param_rename
 from conduit.patcher.dependency_update import apply_dependency_bump
 from conduit.patcher.string_replace import exact_replace, regex_replace, write_if_changed
@@ -63,14 +65,6 @@ def _glob_ok(path: Path, patterns: list[str], root: Path) -> bool:
     return False
 
 
-def _apply_import_rewrite(content: str, old_import: str, new_import: str) -> tuple[str, int]:
-    if not old_import or old_import not in content:
-        return content, 0
-    updated = content.replace(old_import, new_import)
-    count = content.count(old_import)
-    return updated, count
-
-
 def apply_packet(
     root: Path,
     packet: dict[str, Any],
@@ -83,7 +77,6 @@ def apply_packet(
     root = root.resolve()
     report = PatchReport()
     files = _iter_candidate_files(root, file_allowlist)
-    # Always include manifests for DEPENDENCY_BUMP
     for name in ("requirements.txt", "pyproject.toml", "package.json"):
         path = root / name
         if path.is_file() and path.resolve() not in files:
@@ -148,14 +141,37 @@ def apply_packet(
                     f"{rule.get('new_param')} ({count}x)"
                 )
             elif rule_type == "AST_IMPORT_REWRITE":
-                updated, count = _apply_import_rewrite(
+                updated, count = apply_import_rewrite(
+                    path,
                     original,
-                    rule.get("old_import", ""),
-                    rule.get("new_import", ""),
+                    old_import=rule.get("old_import", ""),
+                    new_import=rule.get("new_import", ""),
                 )
                 detail = (
                     f'Rewrote import "{rule.get("old_import")}" -> '
                     f'"{rule.get("new_import")}" ({count}x)'
+                )
+            elif rule_type == "AST_ATTR_RENAME":
+                updated, count = apply_attr_rename(
+                    path,
+                    original,
+                    old_attr=rule.get("old_attr", ""),
+                    new_attr=rule.get("new_attr", ""),
+                )
+                detail = (
+                    f'Renamed attr "{rule.get("old_attr")}" -> '
+                    f'"{rule.get("new_attr")}" ({count}x)'
+                )
+            elif rule_type == "AST_CALL_REWRITE":
+                updated, count = apply_call_rewrite(
+                    path,
+                    original,
+                    old_callee=rule.get("old_callee", ""),
+                    new_callee=rule.get("new_callee", ""),
+                )
+                detail = (
+                    f'Rewrote call "{rule.get("old_callee")}" -> '
+                    f'"{rule.get("new_callee")}" ({count}x)'
                 )
             else:
                 continue

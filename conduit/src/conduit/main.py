@@ -13,6 +13,7 @@ from rich.table import Table
 from conduit.context.fetch import read_local_text
 from conduit.detect.modules.discovery import load_modules
 from conduit.detect.orchestrator import run_detect
+from conduit.export_delta import compute_export_delta, prune_by_export_symbols
 from conduit.packet.cache import save_packet
 from conduit.packet.synthesize import (
     ensure_packet,
@@ -26,6 +27,7 @@ from conduit.prune.grep_imports import prune_by_imports
 from conduit.scaffold.module_new import scaffold_module
 from conduit.scaffold.packet_init import scaffold_packet
 from conduit.self_correct import verify_with_self_correct
+from conduit.test_gen import ensure_tests
 
 app = typer.Typer(
     name="conduit",
@@ -152,6 +154,9 @@ def run_cmd(
     no_push: bool = typer.Option(False, "--no-push"),
     skip_modules: bool = typer.Option(False, "--skip-modules"),
     skip_lockfile: bool = typer.Option(False, "--skip-lockfile"),
+    skip_export_delta: bool = typer.Option(
+        False, "--skip-export-delta", help="Skip package export delta pruning"
+    ),
     max_retries: int = typer.Option(5, "--max-retries"),
 ) -> None:
     """Full pipeline: detect → prune → packet → apply → verify → PR."""
@@ -188,6 +193,28 @@ def run_cmd(
 
     files = prune_by_imports(root, [pkg])
     console.print(f"Pruned to {len(files)} file(s) importing {pkg}")
+
+    if not skip_export_delta:
+        from_v = str(pkt.get("from_version") or "")
+        to_v = str(pkt.get("to_version") or "")
+        eco = str(pkt.get("ecosystem") or "pypi")
+        delta = compute_export_delta(
+            package=pkg,
+            from_version=from_v,
+            to_version=to_v,
+            ecosystem=eco,
+            cache_root=root / ".conduit" / "exports",
+        )
+        if delta.skipped_reason:
+            console.print(f"[yellow]Export delta skipped:[/yellow] {delta.skipped_reason}")
+        else:
+            before = len(files)
+            files = prune_by_export_symbols(files, delta)
+            console.print(
+                f"Export delta: {len(delta.removed)} removed, {len(delta.added)} added, "
+                f"{len(delta.renamed)} renamed → {len(files)} file(s) (was {before})"
+            )
+
     report = apply_packet(root, pkt, dry_run=False, file_allowlist=files or None)
     for change in report.changes:
         console.print(f"[{change.rule_type}] {change.path}: {change.detail}")
@@ -205,6 +232,12 @@ def run_cmd(
         )
         corrected: list[str] = []
     else:
+        generated = ensure_tests(root, pkt, changed_files=report.files_modified)
+        for rel in generated:
+            console.print(f"[test-gen] created {rel}")
+            if rel not in report.files_modified:
+                report.files_modified.append(rel)
+
         test_result, corrected = verify_with_self_correct(
             root, pkt, max_retries=max_retries
         )
@@ -355,7 +388,7 @@ def packet_synthesize_cmd(
     docs: Optional[Path] = typer.Option(None, "--docs"),
     out: Path = typer.Option(Path("conduit-packet.json"), "--out"),
 ) -> None:
-    """Synthesize a packet from changelog/docs (LLM if OPENAI_API_KEY set)."""
+    """Synthesize a packet from changelog/docs (LLM if configured)."""
     packet = synthesize_from_docs(
         package=package,
         from_version=from_version,

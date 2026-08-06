@@ -1,0 +1,79 @@
+# Architecture
+
+Conduit is a **self-hosted migration engine**. It does not rely on a central packet registry. When you run `conduit run`, it builds (or loads) a Migration Packet and applies deterministic transforms in the consumer repo.
+
+## Design principles
+
+1. **Deterministic first** — production code changes come from packet rules (AST/string), not free-form LLM rewrites.
+2. **Scoped work** — lockfile isolation → import prune → export-delta prune so large monorepos stay cheap.
+3. **Verify against the consumer’s own tests** — pytest / `npm test` / `go test`.
+4. **LLM as a backup** — optional for packet synthesis, failed-test repair, and missing-test generation.
+5. **Pluggable detection** — vendor **detect modules** emit signals that can seed packet rules.
+
+## Pipeline
+
+```text
+┌─────────────────┐
+│ 1. Detect       │  lockfile/manifest git diff + detect modules
+└────────┬────────┘
+         ▼
+┌─────────────────┐
+│ 2. Prune        │  import-string filter (drop unrelated files)
+└────────┬────────┘
+         ▼
+┌─────────────────┐
+│ 3. Export delta │  compare public APIs old vs new package version
+└────────┬────────┘
+         ▼
+┌─────────────────┐
+│ 4. Packet       │  --packet | .conduit/packets cache | synth from signals
+└────────┬────────┘
+         ▼
+┌─────────────────┐
+│ 5. Apply        │  AST / string / dependency codemods
+└────────┬────────┘
+         ▼
+┌─────────────────┐
+│ 6. Verify       │  ensure tests → run suite → self-correct (≤5)
+└────────┬────────┘
+         ▼
+┌─────────────────┐
+│ 7. PR           │  branch conduit/upgrade-{pkg}-{ver} → gh pr create
+└─────────────────┘
+```
+
+## Tiered scoping (why it stays fast)
+
+| Tier | Mechanism | Effect |
+|------|-----------|--------|
+| 1 | Lockfile/manifest git diff | Only upgraded packages matter (e.g. 1 of 50) |
+| 2 | Import grep | Only files that import those packages |
+| 3 | Export delta | Prefer files mentioning changed/removed symbols |
+| 4 | Hard excludes | Skip `node_modules/`, `.git/`, `dist/`, `vendor/`, etc. |
+
+AST work runs only on the surviving file set.
+
+## Core packages (code map)
+
+| Path | Role |
+|------|------|
+| `conduit/detect/` | Orchestrator, lockfile diff, module plugins |
+| `conduit/prune/` | Import pre-filter |
+| `conduit/export_delta/` | Fetch + diff package exports |
+| `conduit/packet/` | Cache, validate, synthesize |
+| `conduit/patcher/` | Apply rules |
+| `conduit/llm/` | Model-agnostic chat client |
+| `conduit/test_runner.py` / `test_gen.py` / `self_correct.py` | Verify loop |
+| `conduit/pr_generator.py` | Branch + PR |
+
+## What is *not* in the hot path
+
+- A hosted “Central Migration Registry” — packets live in-repo (`.conduit/packets/`) or are passed with `--packet`.
+- LLM rewriting every file on every run — apply is rule-based unless tests fail and an LLM is configured.
+
+## Related docs
+
+- [Detection](detection.md)
+- [Pruning & export delta](pruning-and-export-delta.md)
+- [Codemods](codemods.md)
+- [Testing & self-correction](testing-and-self-correct.md)

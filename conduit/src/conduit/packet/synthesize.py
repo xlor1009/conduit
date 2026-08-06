@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
-import re
 from pathlib import Path
 from typing import Any
 
@@ -97,22 +95,6 @@ def packet_from_signals(
     return packet
 
 
-def _extract_json_object(text: str) -> dict[str, Any] | None:
-    text = text.strip()
-    try:
-        data = json.loads(text)
-        return data if isinstance(data, dict) else None
-    except json.JSONDecodeError:
-        match = re.search(r"\{[\s\S]*\}", text)
-        if not match:
-            return None
-        try:
-            data = json.loads(match.group(0))
-            return data if isinstance(data, dict) else None
-        except json.JSONDecodeError:
-            return None
-
-
 def synthesize_from_docs(
     *,
     package: str,
@@ -124,9 +106,11 @@ def synthesize_from_docs(
     base: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    Build a packet from vendor docs. Uses LLM when OPENAI_API_KEY is set;
+    Build a packet from vendor docs. Uses configured LLM when available;
     otherwise returns base packet or empty rules with sources noted.
     """
+    from conduit.llm import get_llm_client
+
     packet = base or empty_packet(
         package=package,
         ecosystem=ecosystem,
@@ -143,22 +127,17 @@ def synthesize_from_docs(
             {"url": "local://docs", "kind": "docs"}
         )
 
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not api_key or not (changelog_text or docs_text):
+    client = get_llm_client()
+    if client is None or not (changelog_text or docs_text):
         return packet
 
-    try:
-        from openai import OpenAI
-    except ImportError:
-        return packet
-
-    client = OpenAI(api_key=api_key)
     prompt = {
         "instructions": (
             "Generate a Conduit migration packet JSON with keys: "
             "packet_id, package, ecosystem, from_version, to_version, sources, notes, rules. "
             "Rules may use EXACT_STRING_REPLACE, REGEX_REPLACE, AST_PARAM_RENAME, "
-            "DEPENDENCY_BUMP, AST_IMPORT_REWRITE. Reply with JSON only."
+            "DEPENDENCY_BUMP, AST_IMPORT_REWRITE, AST_ATTR_RENAME, AST_CALL_REWRITE. "
+            "Reply with JSON only."
         ),
         "package": package,
         "from_version": from_version,
@@ -169,24 +148,13 @@ def synthesize_from_docs(
         "seed": packet,
     }
     try:
-        resp = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You author Conduit migration packets. JSON only.",
-                },
-                {"role": "user", "content": json.dumps(prompt)},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0,
+        data = client.complete_json(
+            system="You author Conduit migration packets. JSON only.",
+            user=json.dumps(prompt),
         )
-        content = resp.choices[0].message.content or "{}"
-        data = _extract_json_object(content)
         if data and not validate_packet(data):
             return data
         if data:
-            # merge rules even if soft-invalid
             packet["rules"] = data.get("rules") or packet.get("rules") or []
             packet["notes"] = data.get("notes") or packet.get("notes")
     except Exception:

@@ -1,0 +1,122 @@
+"""AST import rewrite via libcst (Python) and tree-sitter / string fallback (JS/TS)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import libcst as cst
+
+
+class _ImportRewriteTransformer(cst.CSTTransformer):
+    def __init__(self, old_import: str, new_import: str) -> None:
+        self.old_import = old_import
+        self.new_import = new_import
+        self.changes = 0
+
+    def leave_Import(
+        self, original_node: cst.Import, updated_node: cst.Import
+    ) -> cst.Import:
+        new_names = []
+        changed = False
+        for alias in updated_node.names:
+            name = alias.name
+            dotted = _dotted_name(name)
+            if dotted == self.old_import:
+                changed = True
+                self.changes += 1
+                new_names.append(
+                    alias.with_changes(name=_make_attribute(self.new_import))
+                )
+            else:
+                new_names.append(alias)
+        if changed:
+            return updated_node.with_changes(names=new_names)
+        return updated_node
+
+    def leave_ImportFrom(
+        self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom
+    ) -> cst.BaseSmallStatement | cst.RemovalSentinel:
+        if updated_node.module is None:
+            return updated_node
+        dotted = _dotted_name(updated_node.module)
+        # Full module path rewrite
+        if dotted == self.old_import:
+            self.changes += 1
+            return updated_node.with_changes(module=_make_attribute(self.new_import))
+        # Rewrite `from x import OldName` when old_import is a single name match
+        # or `pkg.Old` style — also handle exact module string replace in source form
+        if self.old_import.startswith(dotted + ".") or dotted.startswith(
+            self.old_import + "."
+        ):
+            # Replace module prefix
+            if dotted.startswith(self.old_import):
+                suffix = dotted[len(self.old_import) :]
+                self.changes += 1
+                return updated_node.with_changes(
+                    module=_make_attribute(self.new_import + suffix)
+                )
+        return updated_node
+
+
+def _dotted_name(node: cst.BaseExpression | cst.Name) -> str:
+    if isinstance(node, cst.Name):
+        return node.value
+    if isinstance(node, cst.Attribute):
+        parts: list[str] = []
+        cur: cst.BaseExpression | None = node
+        while isinstance(cur, cst.Attribute):
+            parts.append(cur.attr.value)
+            cur = cur.value
+        if isinstance(cur, cst.Name):
+            parts.append(cur.value)
+            return ".".join(reversed(parts))
+    return ""
+
+
+def _make_attribute(dotted: str) -> cst.BaseExpression:
+    parts = dotted.split(".")
+    node: cst.BaseExpression = cst.Name(parts[0])
+    for part in parts[1:]:
+        node = cst.Attribute(value=node, attr=cst.Name(part))
+    return node
+
+
+def rewrite_python_imports(content: str, old_import: str, new_import: str) -> tuple[str, int]:
+    if not old_import or old_import not in content:
+        return content, 0
+    try:
+        module = cst.parse_module(content)
+    except Exception:
+        updated = content.replace(old_import, new_import)
+        return updated, content.count(old_import) if updated != content else 0
+    transformer = _ImportRewriteTransformer(old_import, new_import)
+    updated = module.visit(transformer)
+    if transformer.changes:
+        return updated.code, transformer.changes
+    # Fallback string replace for edge cases libcst missed
+    if old_import in content:
+        new_content = content.replace(old_import, new_import)
+        return new_content, content.count(old_import)
+    return content, 0
+
+
+def rewrite_js_imports(content: str, old_import: str, new_import: str) -> tuple[str, int]:
+    from conduit.patcher.js_ast import rewrite_imports_js
+
+    return rewrite_imports_js(content, old_import, new_import)
+
+
+def apply_import_rewrite(
+    path: Path,
+    content: str,
+    *,
+    old_import: str,
+    new_import: str,
+) -> tuple[str, int]:
+    if path.suffix == ".py":
+        return rewrite_python_imports(content, old_import, new_import)
+    if path.suffix in {".ts", ".js", ".tsx", ".jsx"}:
+        return rewrite_js_imports(content, old_import, new_import)
+    updated = content.replace(old_import, new_import) if old_import else content
+    count = content.count(old_import) if old_import and updated != content else 0
+    return updated, count
