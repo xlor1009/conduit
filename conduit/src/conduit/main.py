@@ -39,6 +39,22 @@ packet_app = typer.Typer(help="Migration packet tools")
 app.add_typer(module_app, name="module")
 app.add_typer(packet_app, name="packet")
 console = Console()
+_VERBOSE = False
+
+
+def _vprint(message: str) -> None:
+    if _VERBOSE:
+        console.print(f"[dim][verbose][/dim] {message}")
+
+
+@app.callback()
+def _main(
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Print extra diagnostics"
+    ),
+) -> None:
+    global _VERBOSE
+    _VERBOSE = verbose
 
 
 def _resolve_root(path: Path) -> Path:
@@ -174,8 +190,14 @@ def run_cmd(
         False, "--skip-export-delta", help="Skip package export delta pruning"
     ),
     max_retries: int = typer.Option(5, "--max-retries"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Print extra diagnostics"
+    ),
 ) -> None:
     """Full pipeline: detect → prune → packet → apply → verify → PR."""
+    global _VERBOSE
+    if verbose:
+        _VERBOSE = True
     root = _resolve_root(path)
     names = [module] if module else None
     detected = run_detect(
@@ -206,6 +228,10 @@ def run_cmd(
         use_fixture_fallback=True,
     )
     console.print(f"Using packet [bold]{pkt.get('packet_id')}[/bold] ({len(pkt.get('rules') or [])} rules)")
+    _vprint(
+        f"packet from_version={pkt.get('from_version')!r} "
+        f"to_version={pkt.get('to_version')!r} ecosystem={pkt.get('ecosystem')!r}"
+    )
 
     files = prune_by_imports(root, [pkg])
     console.print(f"Pruned to {len(files)} file(s) importing {pkg}")
@@ -214,6 +240,7 @@ def run_cmd(
         from_v = str(pkt.get("from_version") or "")
         to_v = str(pkt.get("to_version") or "")
         eco = str(pkt.get("ecosystem") or "pypi")
+        _vprint(f"export delta resolve {pkg} {from_v} -> {to_v} ({eco})")
         delta = compute_export_delta(
             package=pkg,
             from_version=from_v,
@@ -223,12 +250,18 @@ def run_cmd(
         )
         if delta.skipped_reason:
             console.print(f"[yellow]Export delta skipped:[/yellow] {delta.skipped_reason}")
+            for line in delta.diagnostics:
+                _vprint(line)
         else:
             before = len(files)
             files = prune_by_export_symbols(files, delta)
             console.print(
                 f"Export delta: {len(delta.removed)} removed, {len(delta.added)} added, "
                 f"{len(delta.renamed)} renamed → {len(files)} file(s) (was {before})"
+            )
+            _vprint(
+                f"symbols from={len(delta.from_symbols)} to={len(delta.to_symbols)} "
+                f"changed={len(delta.changed_symbols)}"
             )
 
     report = apply_packet(root, pkt, dry_run=False, file_allowlist=files or None)

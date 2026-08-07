@@ -21,44 +21,50 @@ def resolve_package_tree(
     *,
     ecosystem: str = "pypi",
     cache_root: Path | None = None,
-) -> Path | None:
+) -> tuple[Path | None, str | None]:
     """
-    Return a directory containing the unpacked package sources for scanning.
-    Uses `.conduit/exports/` cache. Returns None on failure.
+    Return (directory with unpacked sources, error).
+    Uses `.conduit/exports/` cache. On failure returns (None, reason).
     """
+    if not version or version in {"0.0.0", "0", "unknown", "?"}:
+        return None, (
+            f"{package}=={version or '(empty)'}: placeholder/missing version "
+            "(no real package version on the migration packet)"
+        )
+
     dest = _cache_dir(cache_root, ecosystem, package, version)
     marker = dest / ".conduit_ready"
     if marker.is_file() and dest.is_dir():
-        return dest
+        return dest, None
 
     dest.mkdir(parents=True, exist_ok=True)
     try:
         if ecosystem in {"pypi", "pip", "other"}:
-            ok = _fetch_pypi(package, version, dest)
+            ok, err = _fetch_pypi(package, version, dest)
         elif ecosystem == "npm":
-            ok = _fetch_npm(package, version, dest)
+            ok, err = _fetch_npm(package, version, dest)
         else:
-            ok = _fetch_pypi(package, version, dest)
-    except Exception:
-        ok = False
+            ok, err = _fetch_pypi(package, version, dest)
+    except Exception as exc:
+        ok, err = False, f"{package}=={version}: {exc}"
 
     if not ok:
-        # Leave empty dir; caller treats None
         if dest.exists() and not any(dest.iterdir()):
             dest.rmdir()
-        return None
+        return None, err or f"{package}=={version}: fetch failed"
 
     marker.write_text("ok", encoding="utf-8")
-    return dest
+    return dest, None
 
 
-def _fetch_pypi(package: str, version: str, dest: Path) -> bool:
+def _fetch_pypi(package: str, version: str, dest: Path) -> tuple[bool, str]:
     """pip download --no-deps and unpack sdist/wheel into dest."""
     download_dir = dest / "_download"
     if download_dir.exists():
         shutil.rmtree(download_dir)
     download_dir.mkdir(parents=True, exist_ok=True)
 
+    spec = f"{package}=={version}"
     cmd = [
         "python",
         "-m",
@@ -69,7 +75,7 @@ def _fetch_pypi(package: str, version: str, dest: Path) -> bool:
         ":none:",
         "-d",
         str(download_dir),
-        f"{package}=={version}",
+        spec,
     ]
     # Prefer sdist; if that fails, allow wheels
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -82,15 +88,18 @@ def _fetch_pypi(package: str, version: str, dest: Path) -> bool:
             "--no-deps",
             "-d",
             str(download_dir),
-            f"{package}=={version}",
+            spec,
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if proc.returncode != 0:
-            return False
+            detail = (proc.stderr or proc.stdout or "").strip()
+            if len(detail) > 500:
+                detail = detail[:500] + "…"
+            return False, f"pip download {spec} failed" + (f": {detail}" if detail else "")
 
     archives = list(download_dir.glob("*"))
     if not archives:
-        return False
+        return False, f"pip download {spec} produced no archives"
 
     archive = archives[0]
     extract_root = dest / "_src"
@@ -106,29 +115,29 @@ def _fetch_pypi(package: str, version: str, dest: Path) -> bool:
         with tarfile.open(archive, "r:gz") as tf:
             tf.extractall(extract_root)
     else:
-        return False
+        return False, f"unsupported archive type for {spec}: {archive.name}"
 
-    # Flatten single top-level sdist folder
-    children = [p for p in extract_root.iterdir() if p.name != "_download"]
-    if len(children) == 1 and children[0].is_dir():
-        return True
-    return True
+    return True, ""
 
 
-def _fetch_npm(package: str, version: str, dest: Path) -> bool:
+def _fetch_npm(package: str, version: str, dest: Path) -> tuple[bool, str]:
     """npm pack and unpack into dest."""
     if not shutil.which("npm") and not shutil.which("npm.cmd"):
-        return False
+        return False, "npm not found on PATH"
     npm = "npm.cmd" if shutil.which("npm.cmd") else "npm"
+    spec = f"{package}@{version}"
     proc = subprocess.run(
-        [npm, "pack", f"{package}@{version}", "--pack-destination", str(dest)],
+        [npm, "pack", spec, "--pack-destination", str(dest)],
         capture_output=True,
         text=True,
         check=False,
         cwd=dest,
     )
     if proc.returncode != 0:
-        return False
+        detail = (proc.stderr or proc.stdout or "").strip()
+        if len(detail) > 500:
+            detail = detail[:500] + "…"
+        return False, f"npm pack {spec} failed" + (f": {detail}" if detail else "")
 
     tgzs = list(dest.glob("*.tgz"))
     if not tgzs:
@@ -139,7 +148,7 @@ def _fetch_npm(package: str, version: str, dest: Path) -> bool:
             if candidate.is_file():
                 tgzs = [candidate]
     if not tgzs:
-        return False
+        return False, f"npm pack {spec} produced no tarball"
 
     extract_root = dest / "_src"
     if extract_root.exists():
@@ -147,7 +156,7 @@ def _fetch_npm(package: str, version: str, dest: Path) -> bool:
     extract_root.mkdir(parents=True, exist_ok=True)
     with tarfile.open(tgzs[0], "r:gz") as tf:
         tf.extractall(extract_root)
-    return True
+    return True, ""
 
 
 def package_scan_root(tree: Path) -> Path:

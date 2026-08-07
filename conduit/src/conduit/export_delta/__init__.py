@@ -23,6 +23,7 @@ class ExportDelta:
     from_symbols: set[str] = field(default_factory=set)
     to_symbols: set[str] = field(default_factory=set)
     skipped_reason: str | None = None
+    diagnostics: list[str] = field(default_factory=list)
 
     @property
     def changed_symbols(self) -> set[str]:
@@ -43,6 +44,7 @@ class ExportDelta:
             "removed": sorted(self.removed),
             "renamed": dict(sorted(self.renamed.items())),
             "skipped_reason": self.skipped_reason,
+            "diagnostics": list(self.diagnostics),
         }
 
 
@@ -66,18 +68,30 @@ def compute_export_delta(
         return result
 
     try:
-        old_tree = resolve_package_tree(
+        old_tree, old_err = resolve_package_tree(
             package, from_version, ecosystem=ecosystem, cache_root=cache_root
         )
-        new_tree = resolve_package_tree(
+        new_tree, new_err = resolve_package_tree(
             package, to_version, ecosystem=ecosystem, cache_root=cache_root
         )
     except Exception as exc:
         result.skipped_reason = f"resolve failed: {exc}"
         return result
 
+    if old_err:
+        result.diagnostics.append(f"from {package}=={from_version}: {old_err}")
+    if new_err:
+        result.diagnostics.append(f"to {package}=={to_version}: {new_err}")
+
     if old_tree is None or new_tree is None:
-        result.skipped_reason = "could not resolve one or both package versions"
+        failed = []
+        if old_tree is None:
+            failed.append(f"{package}=={from_version}")
+        if new_tree is None:
+            failed.append(f"{package}=={to_version}")
+        result.skipped_reason = (
+            "could not resolve " + " and ".join(failed) + f" ({ecosystem})"
+        )
         return result
 
     try:

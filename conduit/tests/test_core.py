@@ -48,6 +48,22 @@ def test_detect_lockfile_jumps_non_git_dir(tmp_path: Path):
     assert detect_lockfile_jumps(plain) == []
 
 
+def test_export_delta_placeholder_version(tmp_path: Path):
+    from conduit.export_delta import compute_export_delta
+
+    delta = compute_export_delta(
+        package="openai",
+        from_version="0.0.0",
+        to_version="1.0.0",
+        ecosystem="pypi",
+        cache_root=tmp_path / "exports",
+    )
+    assert delta.skipped_reason is not None
+    assert "openai==0.0.0" in delta.skipped_reason
+    assert delta.diagnostics
+    assert "placeholder" in delta.diagnostics[0]
+
+
 def test_load_modules_includes_openai():
     names = {m.name for m in load_modules()}
     assert "openai" in names
