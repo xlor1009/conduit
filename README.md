@@ -31,7 +31,7 @@ git clone https://github.com/xlor1009/conduit.git
 cd conduit
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e "./conduit[llm,langs,dev]"
+python -m pip install -e "./conduit[llm,langs,dev]"
 
 conduit run \
   --path ./examples/demo-consumer \
