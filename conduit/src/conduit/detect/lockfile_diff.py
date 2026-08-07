@@ -22,13 +22,18 @@ MANIFEST_NAMES = {
 
 
 def _git(cwd: Path, *args: str) -> str:
-    proc = subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        # Windows raises NotADirectoryError (WinError 267) when cwd is missing
+        # or not a directory; treat like a failed git invocation.
+        return ""
     if proc.returncode != 0:
         return ""
     return proc.stdout
@@ -144,11 +149,11 @@ def detect_lockfile_jumps(
     If no git history, returns empty list.
     """
     root = root.resolve()
-    if not (root / ".git").exists() and not _git(root, "rev-parse", "--is-inside-work-tree").strip():
-        # May be inside a work tree without .git dir at root
-        inside = _git(root, "rev-parse", "--is-inside-work-tree").strip()
-        if inside != "true":
-            return []
+    if not root.is_dir():
+        return []
+    # .git may be absent in linked work trees; ask git directly.
+    if _git(root, "rev-parse", "--is-inside-work-tree").strip() != "true":
+        return []
 
     ref = base_ref or "HEAD~1"
     # Prefer merge-base with origin/main when base_ref looks like a branch tip

@@ -42,7 +42,11 @@ console = Console()
 
 
 def _resolve_root(path: Path) -> Path:
-    return path.expanduser().resolve()
+    root = path.expanduser().resolve()
+    if not root.is_dir():
+        console.print(f"[red]Path is not a directory:[/red] {root}")
+        raise typer.Exit(2)
+    return root
 
 
 def _pick_package(signals, package: Optional[str]) -> str | None:

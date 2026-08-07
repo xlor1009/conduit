@@ -6,7 +6,7 @@ import json
 import shutil
 from pathlib import Path
 
-from conduit.detect.lockfile_diff import diff_versions
+from conduit.detect.lockfile_diff import detect_lockfile_jumps, diff_versions
 from conduit.detect.modules.discovery import load_modules
 from conduit.export_delta.diff import diff_exports
 from conduit.export_delta.extract import _python_file_exports
@@ -33,6 +33,19 @@ def test_diff_versions_requirements():
     assert len(jumps) == 1
     assert jumps[0].name == "openai"
     assert jumps[0].is_major
+
+
+def test_detect_lockfile_jumps_missing_root(tmp_path: Path):
+    """Invalid cwd must not raise (Windows WinError 267)."""
+    missing = tmp_path / "does-not-exist"
+    assert detect_lockfile_jumps(missing) == []
+
+
+def test_detect_lockfile_jumps_non_git_dir(tmp_path: Path):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    (plain / "requirements.txt").write_text("openai==1.0.0\n", encoding="utf-8")
+    assert detect_lockfile_jumps(plain) == []
 
 
 def test_load_modules_includes_openai():
