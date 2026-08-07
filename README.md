@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Self-hosted CLI that migrates your code when dependencies make breaking API changes.</strong>
+  <strong>Self-hosted CLI that updates your code when dependencies make breaking API changes.</strong>
 </p>
 
 <p align="center">
