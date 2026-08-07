@@ -4,10 +4,11 @@ After detection, Conduit shrinks the file set before building ASTs or applying r
 
 ## Import prune (Tier 2)
 
-`prune_by_imports(root, packages)` scans source files (`.py`, `.ts`, `.js`, `.tsx`, `.jsx`) for import-like strings:
+`prune_by_imports(root, packages)` scans source files (`.py`, `.ts`, `.js`, `.tsx`, `.jsx`, `.java`, `.go`) for import-like strings:
 
 - `from openai import …` / `import openai`
 - `from "openai"` / `import("openai")` / `require("openai")`
+- Java `import com.openai…;` / Go `"module/path"` import paths
 
 Hard exclusions (never scanned):
 

@@ -24,6 +24,8 @@ If nothing is detected, the runner currently treats the suite as a soft pass —
    - Python: `tests/test_conduit_migration.py` (import package + marker assert)
    - npm ecosystem: `conduit_migration.test.js`
 
+Runners already cover pytest, `npm test`, and `go test ./...`. Java/Maven suites are not auto-detected yet — pass existing tests in-repo or generate via LLM.
+
 Generated paths are included in the patch report / PR body.
 
 ## Self-correction loop

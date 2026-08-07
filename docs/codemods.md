@@ -38,12 +38,17 @@ Globs match basename or repo-relative path (`fnmatch`).
 
 ### `AST_PARAM_RENAME`
 
-Renames a keyword argument (Python via **libcst**) or object property / `=` style (JS/TS heuristics or tree-sitter helpers).
+Renames a keyword / named parameter near a matching call:
+
+- **Python** — libcst kwargs
+- **JS/TS** — object property keys in call args (tree-sitter when `langs` installed)
+- **Java** — builder-style `.oldParam(...)` method names
+- **Go** — struct-literal keys (`OldParam:`)
 
 ```json
 {
   "type": "AST_PARAM_RENAME",
-  "target_files": ["*.py", "*.ts", "*.js"],
+  "target_files": ["*.py", "*.ts", "*.js", "*.java", "*.go"],
   "function_target": "chat.completions.create",
   "old_param": "max_tokens",
   "new_param": "max_completion_tokens"
@@ -54,12 +59,12 @@ Renames a keyword argument (Python via **libcst**) or object property / `=` styl
 
 ### `AST_IMPORT_REWRITE`
 
-Python uses libcst `Import` / `ImportFrom` transforms. JS/TS uses import/require string rewrites (tree-sitter optional).
+Rewrites import / module paths via the language engine for the file suffix (libcst for Python; tree-sitter import literals for JS/TS, Java, and Go).
 
 ```json
 {
   "type": "AST_IMPORT_REWRITE",
-  "target_files": ["*.py"],
+  "target_files": ["*.py", "*.ts", "*.js", "*.java", "*.go"],
   "old_import": "openai",
   "new_import": "openai"
 }
@@ -67,10 +72,12 @@ Python uses libcst `Import` / `ImportFrom` transforms. JS/TS uses import/require
 
 ### `AST_ATTR_RENAME`
 
+Renames attribute / member-access chains (e.g. `openai.ChatCompletion` → `openai.chat.completions`).
+
 ```json
 {
   "type": "AST_ATTR_RENAME",
-  "target_files": ["*.py"],
+  "target_files": ["*.py", "*.ts", "*.js", "*.java", "*.go"],
   "old_attr": "openai.ChatCompletion",
   "new_attr": "openai.chat.completions"
 }
@@ -78,10 +85,12 @@ Python uses libcst `Import` / `ImportFrom` transforms. JS/TS uses import/require
 
 ### `AST_CALL_REWRITE`
 
+Rewrites call / callee paths the same way as attribute rename, targeting call expressions.
+
 ```json
 {
   "type": "AST_CALL_REWRITE",
-  "target_files": ["*.py"],
+  "target_files": ["*.py", "*.ts", "*.js", "*.java", "*.go"],
   "old_callee": "openai.ChatCompletion.create",
   "new_callee": "openai.chat.completions.create"
 }
@@ -89,7 +98,7 @@ Python uses libcst `Import` / `ImportFrom` transforms. JS/TS uses import/require
 
 ### `DEPENDENCY_BUMP`
 
-Updates manifests (`requirements.txt`, `pyproject.toml`, `package.json`). Always considered even if the file was not import-pruned.
+Updates manifests (`requirements.txt`, `pyproject.toml`, `package.json`, `go.mod`, `pom.xml`, `build.gradle` / `.kts`). Always considered even if the file was not import-pruned.
 
 ```json
 {
@@ -97,17 +106,32 @@ Updates manifests (`requirements.txt`, `pyproject.toml`, `package.json`). Always
   "package": "openai",
   "from_version": "0.28.1",
   "to_version": "1.0.0",
-  "ecosystems": ["pip", "pyproject"]
+  "ecosystems": ["pip", "pyproject", "npm", "go", "maven", "gradle"]
 }
 ```
 
 ## Language engines
 
+Pluggable engines under `conduit.patcher.languages` dispatch AST rules by file suffix.
+Missing optional grammars fall back to regex/string transforms (apply never hard-fails).
+Optional formatters (`gofmt`, `prettier`, `google-java-format`) run after edits when present on `PATH`.
+
 | Language | Engine |
 |----------|--------|
-| Python | libcst for AST rules; string/regex otherwise |
-| JS/TS | Prefer tree-sitter when `llm-js` extra installed; regex/string fallbacks always available |
+| Python | libcst (`PythonEngine`) |
+| JS/TS | tree-sitter when `langs` / `llm-js` extra installed; regex/string fallbacks |
+| Java | tree-sitter (`tree-sitter-java`) + fallbacks |
+| Go | tree-sitter (`tree-sitter-go`) + `gofmt` when available |
 | YAML/JSON/env | String / regex rules only |
+
+Install grammars:
+
+```bash
+pip install -e "./conduit[langs]"
+# or with LLM extras:
+pip install -e "./conduit[llm,langs,dev]"
+```
+
 
 ## Apply CLI
 

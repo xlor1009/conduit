@@ -23,7 +23,7 @@ SKIP_DIRS = {
     ".conduit",
 }
 
-SCAN_SUFFIXES = {".py", ".ts", ".js", ".tsx", ".jsx"}
+SCAN_SUFFIXES = {".py", ".ts", ".js", ".tsx", ".jsx", ".java", ".go"}
 
 
 def _import_patterns(package: str) -> list[re.Pattern[str]]:
@@ -35,6 +35,11 @@ def _import_patterns(package: str) -> list[re.Pattern[str]]:
         re.compile(rf"""import\s*\(\s*['"]{pkg}['"]"""),
         re.compile(rf"""require\s*\(\s*['"]{pkg}['"]\s*\)"""),
         re.compile(rf"""from\s+['"]{pkg}/"""),
+        # Java: import com.foo.Bar; / import static ...
+        re.compile(rf"\bimport\s+(?:static\s+)?{pkg}(?:\.|;|\s)"),
+        # Go: import "module/path" or import ( "module/path" )
+        re.compile(rf"""["`]{pkg}["`]"""),
+        re.compile(rf"""["`]{pkg}/"""),
     ]
 
 

@@ -19,7 +19,7 @@ Schema: [`schema/conduit-packet.schema.json`](../schema/conduit-packet.schema.js
 }
 ```
 
-`ecosystem` is one of: `pypi`, `npm`, `go`, `other`.
+`ecosystem` is one of: `pypi`, `npm`, `go`, `maven`, `other`.
 
 ## Where packets come from (`ensure_packet`)
 
@@ -56,11 +56,11 @@ conduit packet show ./my-packet/conduit-packet.json
 |------|---------|
 | `EXACT_STRING_REPLACE` | Literal find/replace |
 | `REGEX_REPLACE` | Regex replace |
-| `AST_PARAM_RENAME` | Rename kwarg / object key near a call |
-| `AST_IMPORT_REWRITE` | Rewrite import module path |
-| `AST_ATTR_RENAME` | Rename attribute chain |
+| `AST_PARAM_RENAME` | Rename kwarg / object key / builder method / struct key near a call |
+| `AST_IMPORT_REWRITE` | Rewrite import module path (Python, JS/TS, Java, Go) |
+| `AST_ATTR_RENAME` | Rename attribute / member chain |
 | `AST_CALL_REWRITE` | Rewrite call callee path |
-| `DEPENDENCY_BUMP` | Bump version in manifests |
+| `DEPENDENCY_BUMP` | Bump version in pip/npm/go.mod/Maven/Gradle manifests |
 
 Full field docs: [Codemods](codemods.md).
 

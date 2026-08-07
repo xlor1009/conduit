@@ -10,6 +10,10 @@
   Bump a package. Conduit finds the call sites, applies structural fixes, runs your tests, and opens a PR.
 </p>
 
+<p align="center">
+  Deterministic AST engines for <strong>Python, JS/TS, Java, and Go</strong> — LLM only as backup.
+</p>
+
 ```text
 Detect upgrade  →  Prune files  →  Apply migration rules  →  Test / fix  →  Open PR
 ```
@@ -25,7 +29,9 @@ Detect upgrade  →  Prune files  →  Apply migration rules  →  Test / fix  �
 ```bash
 git clone https://github.com/xlor1009/conduit.git
 cd conduit
-pip install -e "./conduit[llm,dev]"
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e "./conduit[llm,langs,dev]"
 
 conduit run \
   --path ./examples/demo-consumer \
@@ -59,7 +65,7 @@ More: [Getting started](docs/getting-started.md) · [CLI reference](docs/cli-ref
 | **Prune** | Keep files that import the upgraded package |
 | **Export delta** | Compare public APIs between old/new versions |
 | **Packet** | Load or build `conduit-packet.json` rules |
-| **Apply** | Deterministic AST/string codemods (no LLM required) |
+| **Apply** | Deterministic AST/string codemods for Python, JS/TS, Java, Go (no LLM required) |
 | **Verify** | Native tests + optional LLM self-correct |
 | **PR** | Branch `conduit/upgrade-{package}-{version}` |
 

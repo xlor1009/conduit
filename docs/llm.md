@@ -41,10 +41,16 @@ Legacy alias: `openai_compatible` → treated as `custom`.
 
 ## Examples
 
+Install extras inside the project venv (see [Getting started](getting-started.md)):
+
+```bash
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e "./conduit[llm,langs]"    # or [llm-anthropic] / [llm-all]
+```
+
 ### Ollama (no key)
 
 ```bash
-pip install -e "./conduit[llm]"
 export CONDUIT_LLM_PROVIDER=ollama
 export CONDUIT_LLM_MODEL=llama3.2
 # optional: export CONDUIT_LLM_BASE_URL=http://127.0.0.1:11434/v1
@@ -53,7 +59,6 @@ export CONDUIT_LLM_MODEL=llama3.2
 ### Custom local server (vLLM, LM Studio, llama.cpp server, …)
 
 ```bash
-pip install -e "./conduit[llm]"
 export CONDUIT_LLM_PROVIDER=custom
 export CONDUIT_LLM_BASE_URL=http://127.0.0.1:1234/v1
 export CONDUIT_LLM_MODEL=my-local-model
@@ -64,7 +69,6 @@ export CONDUIT_LLM_MODEL=my-local-model
 ### OpenAI / Anthropic
 
 ```bash
-pip install -e "./conduit[llm]"            # or [llm-anthropic]
 export CONDUIT_LLM_PROVIDER=openai
 export OPENAI_API_KEY=sk-...
 

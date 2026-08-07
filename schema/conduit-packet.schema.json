@@ -12,7 +12,7 @@
     "package": { "type": "string", "minLength": 1 },
     "ecosystem": {
       "type": "string",
-      "enum": ["pypi", "npm", "go", "other"]
+      "enum": ["pypi", "npm", "go", "maven", "other"]
     },
     "from_version": { "type": "string" },
     "to_version": { "type": "string" },
@@ -114,7 +114,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["pip", "npm", "pyproject"]
+            "enum": ["pip", "npm", "pyproject", "go", "maven", "gradle"]
           }
         }
       }

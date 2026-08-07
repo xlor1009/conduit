@@ -1,4 +1,4 @@
-"""AST parameter rename via libcst (Python) and regex fallback (TS/JS)."""
+"""AST parameter rename via libcst (Python) and language engines."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 
 import libcst as cst
+
+from conduit.patcher.languages.registry import apply_rename_param as _registry_rename_param
 
 
 class _ParamRenameTransformer(cst.CSTTransformer):
@@ -109,18 +111,10 @@ def apply_param_rename(
     old_param: str,
     new_param: str,
 ) -> tuple[str, int]:
-    if path.suffix == ".py":
-        return rename_python_params(
-            content,
-            function_target=function_target,
-            old_param=old_param,
-            new_param=new_param,
-        )
-    if path.suffix in {".ts", ".js", ".tsx", ".jsx"}:
-        return rename_js_params(
-            content,
-            function_target=function_target,
-            old_param=old_param,
-            new_param=new_param,
-        )
-    return content, 0
+    return _registry_rename_param(
+        path,
+        content,
+        function_target=function_target,
+        old_param=old_param,
+        new_param=new_param,
+    )

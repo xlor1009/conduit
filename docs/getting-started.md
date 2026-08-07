@@ -9,12 +9,14 @@
 
 ## Install
 
-From a clone of this repo:
+From a clone of this repo (always use a virtualenv so the `conduit` CLI lands on your PATH):
 
 ```bash
 git clone https://github.com/xlor1009/conduit.git
 cd conduit
-pip install -e "./conduit[llm,dev]"
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e "./conduit[llm,langs,dev]"
 conduit --help
 ```
 
@@ -24,9 +26,21 @@ Extras:
 |-------|----------|
 | `llm` | OpenAI Python SDK (also used to talk to Ollama / custom servers) |
 | `llm-anthropic` | Anthropic SDK |
-| `llm-js` | tree-sitter + JS grammar for richer JS/TS transforms |
-| `llm-all` | All of the above |
+| `langs` | tree-sitter + JS/TS, Java, and Go grammars for richer AST transforms |
+| `llm-js` | Alias subset: tree-sitter + JS/TS grammars |
+| `llm-all` | LLM SDKs + all language grammars |
 | `dev` | pytest |
+
+## Supported languages
+
+| Target language | AST engine | Notes |
+|-----------------|------------|-------|
+| Python | libcst | Default; demo consumer is Python |
+| JavaScript / TypeScript | tree-sitter (`langs` extra) | Regex fallback without grammars |
+| Java | tree-sitter (`langs` extra) | Import + call/attr + builder params |
+| Go | tree-sitter (`langs` extra) | Import paths + selectors; `gofmt` if available |
+
+String/regex rules also apply to YAML, JSON, and `.env*` files. Install `[langs]` for richer non-Python AST transforms before any LLM step.
 
 ## Demo migration (recommended first run)
 

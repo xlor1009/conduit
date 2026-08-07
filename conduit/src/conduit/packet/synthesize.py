@@ -57,7 +57,7 @@ def packet_from_signals(
 
     packet = empty_packet(
         package=package,
-        ecosystem=ecosystem if ecosystem in {"pypi", "npm", "go", "other"} else "other",
+        ecosystem=ecosystem if ecosystem in {"pypi", "npm", "go", "maven", "other"} else "other",
         from_version=from_version,
         to_version=to_version,
         notes="Synthesized from detect signals",

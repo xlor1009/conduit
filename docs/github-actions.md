@@ -33,7 +33,7 @@ Runs `conduit run` on a schedule. In *this* monorepo it also exercises the demo 
 
 ## Composite action
 
-[`conduit/action.yml`](../conduit/action.yml) installs Conduit and runs `conduit run` with inputs:
+[`conduit/action.yml`](../conduit/action.yml) installs Conduit with `[llm,langs,dev]` and runs `conduit run` with inputs:
 
 - `path`, `base-ref`, `package`, `packet`, `skip-pr`, `python-version`
 

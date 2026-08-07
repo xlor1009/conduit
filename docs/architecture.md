@@ -9,6 +9,7 @@ Conduit is a **self-hosted migration engine**. It does not rely on a central pac
 3. **Verify against the consumer’s own tests** — pytest / `npm test` / `go test`.
 4. **LLM as a backup** — optional for packet synthesis, failed-test repair, and missing-test generation.
 5. **Pluggable detection** — vendor **detect modules** emit signals that can seed packet rules.
+6. **Pluggable languages** — AST rules dispatch through language engines (libcst / tree-sitter) so deterministic fixes cover Python, JS/TS, Java, and Go before any LLM step.
 
 ## Pipeline
 
@@ -61,7 +62,8 @@ AST work runs only on the surviving file set.
 | `conduit/prune/` | Import pre-filter |
 | `conduit/export_delta/` | Fetch + diff package exports |
 | `conduit/packet/` | Cache, validate, synthesize |
-| `conduit/patcher/` | Apply rules |
+| `conduit/patcher/` | Apply rules via pluggable language engines (Python/JS/TS/Java/Go) |
+| `conduit/patcher/languages/` | Per-language engines, precise edits, optional formatters |
 | `conduit/llm/` | Model-agnostic chat client |
 | `conduit/test_runner.py` / `test_gen.py` / `self_correct.py` | Verify loop |
 | `conduit/pr_generator.py` | Branch + PR |

@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install Conduit
-        run: pip install -e "./conduit[llm,dev]"
+        run: pip install -e "./conduit[llm,langs,dev]"
       - name: Run Conduit on PR diff
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

@@ -15,7 +15,18 @@ from conduit.patcher.dependency_update import apply_dependency_bump
 from conduit.patcher.string_replace import exact_replace, regex_replace, write_if_changed
 from conduit.prune.grep_imports import SKIP_DIRS
 
-SCAN_SUFFIXES = {".py", ".ts", ".js", ".tsx", ".jsx", ".yaml", ".yml", ".json"}
+SCAN_SUFFIXES = {
+    ".py",
+    ".ts",
+    ".js",
+    ".tsx",
+    ".jsx",
+    ".java",
+    ".go",
+    ".yaml",
+    ".yml",
+    ".json",
+}
 
 
 @dataclass
@@ -51,7 +62,15 @@ def _iter_candidate_files(
             continue
         if path.name.startswith(".env") or path.suffix.lower() in SCAN_SUFFIXES:
             out.append(path)
-        elif path.name in {"requirements.txt", "pyproject.toml", "package.json"}:
+        elif path.name in {
+            "requirements.txt",
+            "pyproject.toml",
+            "package.json",
+            "go.mod",
+            "pom.xml",
+            "build.gradle",
+            "build.gradle.kts",
+        }:
             out.append(path)
     return out
 
@@ -77,7 +96,15 @@ def apply_packet(
     root = root.resolve()
     report = PatchReport()
     files = _iter_candidate_files(root, file_allowlist)
-    for name in ("requirements.txt", "pyproject.toml", "package.json"):
+    for name in (
+        "requirements.txt",
+        "pyproject.toml",
+        "package.json",
+        "go.mod",
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+    ):
         path = root / name
         if path.is_file() and path.resolve() not in files:
             files.append(path.resolve())

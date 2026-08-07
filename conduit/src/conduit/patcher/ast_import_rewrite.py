@@ -1,10 +1,12 @@
-"""AST import rewrite via libcst (Python) and tree-sitter / string fallback (JS/TS)."""
+"""AST import rewrite via libcst (Python) and language engines (JS/TS/Java/Go)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import libcst as cst
+
+from conduit.patcher.languages.registry import apply_rewrite_import as _registry_rewrite_import
 
 
 class _ImportRewriteTransformer(cst.CSTTransformer):
@@ -101,9 +103,9 @@ def rewrite_python_imports(content: str, old_import: str, new_import: str) -> tu
 
 
 def rewrite_js_imports(content: str, old_import: str, new_import: str) -> tuple[str, int]:
-    from conduit.patcher.js_ast import rewrite_imports_js
+    from conduit.patcher.languages.javascript import JsTsEngine
 
-    return rewrite_imports_js(content, old_import, new_import)
+    return JsTsEngine().rewrite_import(content, old_import, new_import)
 
 
 def apply_import_rewrite(
@@ -113,10 +115,4 @@ def apply_import_rewrite(
     old_import: str,
     new_import: str,
 ) -> tuple[str, int]:
-    if path.suffix == ".py":
-        return rewrite_python_imports(content, old_import, new_import)
-    if path.suffix in {".ts", ".js", ".tsx", ".jsx"}:
-        return rewrite_js_imports(content, old_import, new_import)
-    updated = content.replace(old_import, new_import) if old_import else content
-    count = content.count(old_import) if old_import and updated != content else 0
-    return updated, count
+    return _registry_rewrite_import(path, content, old_import, new_import)

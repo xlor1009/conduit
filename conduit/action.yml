@@ -39,7 +39,7 @@ runs:
     - name: Install Conduit
       shell: bash
       run: |
-        pip install -e "${{ github.action_path }}[llm,dev]"
+        pip install -e "${{ github.action_path }}[llm,langs,dev]"
 
     - name: Run Conduit
       shell: bash
