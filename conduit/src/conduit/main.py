@@ -42,6 +42,18 @@ console = Console()
 
 
 def _resolve_root(path: Path) -> Path:
+    raw = str(path)
+    # Windows: "C:foo" (no slash after colon) is drive-relative to cwd, not
+    # "C:\foo". That usually means backslashes were eaten by the shell.
+    if len(raw) >= 3 and raw[1] == ":" and raw[2] not in "\\/":
+        console.print(f"[red]Invalid Windows path:[/red] {raw}")
+        console.print(
+            "Backslashes were likely stripped. Use forward slashes or quotes, e.g.\n"
+            '  --path "C:/Users/you/project"\n'
+            "Or if you are already in the repo:\n"
+            "  --path ."
+        )
+        raise typer.Exit(2)
     root = path.expanduser().resolve()
     if not root.is_dir():
         console.print(f"[red]Path is not a directory:[/red] {root}")
