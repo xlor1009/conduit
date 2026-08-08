@@ -37,11 +37,11 @@ Resolution order in `conduit run`:
 
 1. **`--packet` file path** — if the value names an existing file, load that JSON
 2. **`--packet` package name** — e.g. `--packet openai` (same idea as `--package openai`): synthesize/cache for that package
-3. **Cache** — `.conduit/packets/{package}-{from}-{to}.json`
+3. **Cache** — `.conduit/packets/{package}-{from}-{to}.json` (skip with `--refresh-packet`)
 4. **Synthesize from detect signals** — fold `suggested_rules` into a packet
 5. **OpenAI fixture fallback** — only when `--demo` is set and package is `openai` with empty rules (warns)
 
-Cached after synthesis so the next run is instant. Explicit packet **files** are never overwritten by version rewriting.
+Cached after synthesis so the next run is instant. Explicit packet **files** are never overwritten by version rewriting. Use `--refresh-packet` when live detect has new signals and you want to rebuild the cached packet for the same version pair.
 
 ### How `from_version` / `to_version` are chosen (synthesis)
 

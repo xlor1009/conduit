@@ -268,6 +268,7 @@ def ensure_packet(
     packet_path: Path | None = None,
     installed: dict[str, str] | None = None,
     use_fixture_fallback: bool = True,
+    refresh: bool = False,
 ) -> PacketEnsureResult:
     """Load explicit packet, cache, signal-synth, or openai fixture."""
     from conduit.packet.cache import find_cached_packet, cache_path
@@ -318,13 +319,14 @@ def ensure_packet(
             to_v = rule_to
             to_source = "rule"
 
-    cached = find_cached_packet(root, package, from_v, to_v)
-    if cached:
-        return PacketEnsureResult(
-            packet=cached,
-            from_source="cache" if from_source == "placeholder" else from_source,
-            to_source="cache" if to_source == "placeholder" else to_source,
-        )
+    if not refresh:
+        cached = find_cached_packet(root, package, from_v, to_v)
+        if cached:
+            return PacketEnsureResult(
+                packet=cached,
+                from_source="cache" if from_source == "placeholder" else from_source,
+                to_source="cache" if to_source == "placeholder" else to_source,
+            )
 
     packet = packet_from_signals(
         signals, package=package, ecosystem=eco, from_version=from_v, to_version=to_v
@@ -349,6 +351,11 @@ def ensure_packet(
     _apply_versions(packet, package=package, from_version=from_v, to_version=to_v)
 
     warnings: list[str] = []
+    if refresh:
+        warnings.append(
+            f"refreshed packet cache for {package} {from_v} -> {to_v} "
+            "(ignored existing .conduit/packets entry)"
+        )
     if from_source == "placeholder":
         warnings.append(
             f"from_version defaulted to {from_v!r} "

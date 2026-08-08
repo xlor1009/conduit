@@ -438,6 +438,59 @@ def test_self_correct_stops_early_when_heuristic_noop(tmp_path: Path, monkeypatc
     assert "no remaining occurrences of ''max_tokens''" in joined or "no remaining occurrences of 'max_tokens'" in joined
 
 
+def test_ensure_packet_refresh_skips_cache(tmp_path: Path):
+    signals = [
+        ChangeSignal(
+            source="module:openai",
+            package="openai",
+            change_type="MODEL_DEPRECATION",
+            suggested_rules=[
+                {
+                    "type": "EXACT_STRING_REPLACE",
+                    "match": "old-model",
+                    "replace": "new-model",
+                    "target_files": ["*.py"],
+                }
+            ],
+        )
+    ]
+    first = ensure_packet(
+        tmp_path,
+        signals,
+        package="openai",
+        installed={"openai": "1.0.0"},
+        use_fixture_fallback=False,
+    )
+    assert first.packet["from_version"] == "1.0.0"
+    # Poison the cache
+    from conduit.packet.cache import cache_path
+
+    path = cache_path(tmp_path, "openai", "1.0.0", "1.0.0")
+    stale = dict(first.packet)
+    stale["notes"] = "STALE"
+    path.write_text(json.dumps(stale), encoding="utf-8")
+
+    cached = ensure_packet(
+        tmp_path,
+        signals,
+        package="openai",
+        installed={"openai": "1.0.0"},
+        use_fixture_fallback=False,
+    )
+    assert cached.packet.get("notes") == "STALE"
+
+    refreshed = ensure_packet(
+        tmp_path,
+        signals,
+        package="openai",
+        installed={"openai": "1.0.0"},
+        use_fixture_fallback=False,
+        refresh=True,
+    )
+    assert refreshed.packet.get("notes") != "STALE"
+    assert any("refreshed packet cache" in w for w in refreshed.warnings)
+
+
 def test_parse_live_deprecation_tables():
     from conduit.detect.modules.openai.workers.deprecation_scraper import parse_deprecation_html
 

@@ -110,6 +110,7 @@ Useful flags:
 |------|---------|
 | `--packet <name\|file>` | Package name **or** path to `conduit-packet.json` |
 | `--demo` | Offline fixtures / openai demo packet fallback (default: live detect) |
+| `--refresh-packet` | Rebuild packet from detect signals (ignore `.conduit/packets` cache) |
 | `-v` / `--verbose` | Show version sources, export-delta diagnostics, self-correct failure/fix details |
 | `--skip-pr` | Do not open a PR |
 | `--no-push` | Commit locally but do not push |

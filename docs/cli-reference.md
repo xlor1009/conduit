@@ -34,6 +34,7 @@ Full pipeline: detect → prune → export delta → packet → apply → test g
 | `--module` | auto | Restrict detect modules (if omitted and a package name is known, Conduit uses a matching detect module when one exists) |
 | `--packet` | cache/synth | Path to an existing `conduit-packet.json`, **or** a package name (e.g. `openai`, `stripe`) |
 | `--demo` | false | Offline detect fixtures + openai demo packet fallback (default is **live** vendor sources) |
+| `--refresh-packet` | false | Ignore `.conduit/packets` cache and re-synthesize from current detect signals |
 | `--skip-tests` | false | Skip test gen + verify |
 | `--skip-pr` | false | Do not open a PR |
 | `--no-push` | false | Do not push remote |

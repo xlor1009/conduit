@@ -249,6 +249,11 @@ def run_cmd(
         "--demo",
         help="Use offline detect fixtures + openai demo packet fallback (default: live)",
     ),
+    refresh_packet: bool = typer.Option(
+        False,
+        "--refresh-packet",
+        help="Ignore cached .conduit/packets entry and re-synthesize from detect signals",
+    ),
 ) -> None:
     """Full pipeline: detect → prune → packet → apply → verify → PR."""
     global _VERBOSE
@@ -307,6 +312,7 @@ def run_cmd(
             packet_path=packet_file,
             installed=detected.installed,
             use_fixture_fallback=demo,
+            refresh=refresh_packet,
         )
     else:
         if pkg is None:
@@ -322,6 +328,7 @@ def run_cmd(
             packet_path=None,
             installed=detected.installed,
             use_fixture_fallback=demo,
+            refresh=refresh_packet,
         )
 
     pkt = ensured.packet
