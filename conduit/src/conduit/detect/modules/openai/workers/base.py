@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
 
 from conduit.detect.modules.openai.models_legacy import RawSignal
 
@@ -44,6 +45,11 @@ class Worker(ABC):
     name: str = "worker"
 
     @abstractmethod
-    def run(self, *, demo: bool = False) -> list[RawSignal]:
+    def run(
+        self,
+        *,
+        demo: bool = False,
+        client_state: Any | None = None,
+    ) -> list[RawSignal]:
         """Emit signals. Live sources by default; fixtures only when demo=True."""
         raise NotImplementedError

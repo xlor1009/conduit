@@ -16,7 +16,18 @@ class DetectModule(ABC):
         ...
 ```
 
-`DetectContext` includes `repo_root`, `installed` versions, and `demo` (offline fixtures vs live sources).
+`DetectContext` includes `repo_root`, `installed` versions, **`package_states`** (client baseline from the pre-step), and `demo` (offline fixtures vs live sources).
+
+## Client state pre-step
+
+Before vendor modules run, Conduit scans the client repo per applicable package:
+
+1. **Regex (always)** — import-pruned source files + common config suffixes; vendor pattern packs extract model ids / API shape tokens. Manifests supply `installed_version` and ecosystems (pip vs npm).
+2. **LLM (optional)** — when an LLM is configured and not `--demo`, a small structured pass may merge additional tokens **only if they appear verbatim in provided snippets**. Failures are soft warnings; regex state is kept.
+
+Empty `model_ids` means **unknown**, not all-clear (env/dynamic construction may hide usage).
+
+See [`conduit/src/conduit/detect/client_state.py`](../conduit/src/conduit/detect/client_state.py).
 
 Built-ins register via entry point group:
 
@@ -31,21 +42,21 @@ Discovery: [`conduit/src/conduit/detect/modules/discovery.py`](../conduit/src/co
 
 `OpenAIModule` runs several workers. **Live by default** (network). Pass `--demo` for offline fixtures (CI / sample packet demos).
 
-| Worker | Live source | Demo fixture |
-|--------|-------------|--------------|
-| OpenAPI diff | Fixture `previous.yaml` (baseline) vs freshly cloned `openai/openai-openapi` latest | `fixtures/openai/openapi/` (previous vs latest) |
-| Deprecation scraper | `https://platform.openai.com/docs/deprecations` | `fixtures/openai/deprecations/` |
-| Model polling | `GET /v1/models` (needs `OPENAI_API_KEY`) | `fixtures/openai/models/` |
-| Changelog parser | platform changelog page | `fixtures/openai/changelogs/` |
-| SDK release | GitHub releases API | `fixtures/openai/sdk_releases/` (also lists repos to watch) |
+| Worker | Live source | Client baseline | Demo fixture |
+|--------|-------------|-----------------|--------------|
+| OpenAPI diff | Fixture `previous.yaml` (baseline) vs freshly cloned `openai/openai-openapi` latest | — | `fixtures/openai/openapi/` (previous vs latest) |
+| Deprecation scraper | `https://platform.openai.com/docs/deprecations` | — | `fixtures/openai/deprecations/` |
+| Model polling | `GET /v1/models` (needs `OPENAI_API_KEY`) | `package_states["openai"].model_ids` | `fixtures/openai/models/` (+ `client_used.json` when no scan) |
+| Changelog parser | platform changelog page | — | `fixtures/openai/changelogs/` |
+| SDK release | GitHub releases API | installed openai version + ecosystems | `fixtures/openai/sdk_releases/` |
 
 Normalize emits apply rules **only when grounded**: model A→B when scrape states both; path replace only when both `/v1/...` sides are known; `AST_PARAM_RENAME` only when the signal carries explicit `function_target`(s). No path-fallback maps and no invented ChatCompletion target lists.
 
 Call-shape / successor gaps are filled by **evidence + LLM packet enrichment** (module seed URLs + web search) when an LLM is configured — see [LLM configuration](llm.md).
 
-Clean “0 signals” from OpenAPI/changelog/SDK workers are **verbose-only** (`-v`); missing `OPENAI_API_KEY` for model polling still warns always.
+Clean “0 signals” from OpenAPI/changelog/SDK/model-polling workers are **verbose-only** (`-v`) when the live source ran successfully. Model polling **always warns** when `OPENAI_API_KEY` is missing or `GET /v1/models` fails (and the client has model ids to check). Missing client model ids or installed SDK version are verbose-only (unknown baseline).
 
-Fixtures and the SDK repo list are **info-point / offline** data. Model replacement strings should come from live deprecation pages, not hardcoded module maps.
+Vendor APIs/docs are the **change** source; the client-state pre-step is the **baseline**. Conduit does not rely on local `.models-snapshot.json` / tag snapshots for emit decisions.
 
 ```bash
 conduit detect --path . --module openai          # live

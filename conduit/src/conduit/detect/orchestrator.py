@@ -1,10 +1,11 @@
-"""Core detect orchestrator: lockfile jumps + vendor modules."""
+"""Core detect orchestrator: lockfile jumps + client state + vendor modules."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from conduit.detect.client_state import scan_package_states
 from conduit.detect.lockfile_diff import detect_lockfile_jumps
 from conduit.detect.manifests import read_installed
 from conduit.detect.models import ChangeSignal
@@ -47,13 +48,38 @@ def run_detect(
             installed.setdefault(jump.name, jump.to_version)
 
     if not skip_modules:
+        modules = list(load_modules(names=module_names))
+        # Packages to scan: explicit module packages that apply (or were requested)
+        scan_pkgs: list[str] = []
+        for mod in modules:
+            if (
+                module_names is None
+                and installed
+                and not mod.applies(installed)
+            ):
+                continue
+            scan_pkgs.extend(mod.packages or [mod.name])
+
+        package_states = scan_package_states(
+            root,
+            scan_pkgs,
+            installed=installed,
+            demo=demo,
+            use_llm=not demo,
+        )
+        for state in package_states.values():
+            for note in state.notes:
+                if note.startswith("llm enrichment failed"):
+                    warnings.append(f"client state {state.package}: {note}")
+
         ctx = DetectContext(
             repo_root=root,
             installed=installed,
+            package_states=package_states,
             demo=demo,
             verbose=verbose,
         )
-        for mod in load_modules(names=module_names):
+        for mod in modules:
             if (
                 module_names is None
                 and installed

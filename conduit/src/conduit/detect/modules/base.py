@@ -5,9 +5,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from conduit.detect.models import ChangeSignal
+
+if TYPE_CHECKING:
+    from conduit.detect.client_state import PackageClientState
 
 
 @dataclass
@@ -16,6 +19,7 @@ class DetectContext:
 
     repo_root: Path
     installed: dict[str, str] = field(default_factory=dict)  # package -> version
+    package_states: dict[str, "PackageClientState"] = field(default_factory=dict)
     demo: bool = False  # use offline fixtures; live sources otherwise
     verbose: bool = False
     extra: dict[str, Any] = field(default_factory=dict)

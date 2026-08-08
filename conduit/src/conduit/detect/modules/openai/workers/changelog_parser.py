@@ -155,7 +155,7 @@ def _llm_extract(text: str) -> list[RawSignal]:
 class ChangelogParserWorker(Worker):
     name = "ChangelogParserWorker"
 
-    def run(self, *, demo: bool = False) -> list[RawSignal]:
+    def run(self, *, demo: bool = False, client_state=None) -> list[RawSignal]:
         signals: list[RawSignal] = []
         blobs: list[str] = []
 

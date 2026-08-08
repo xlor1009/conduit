@@ -11,9 +11,8 @@ from conduit.detect.modules.openai.evidence_seeds import (
 )
 from conduit.detect.modules.openai.normalize import default_rules_for, signal_to_event
 from conduit.detect.modules.openai.workers import ALL_WORKERS
-
-# Clean empty results are noisy unless verbose; these stay actionable always.
-_ALWAYS_WARN_EMPTY = frozenset({"ModelPollingWorker"})
+from conduit.detect.modules.openai.workers.model_polling import ModelPollingWorker
+from conduit.detect.modules.openai.workers.sdk_release import SDKReleaseWorker
 
 
 def _align_dependency_bump_from_installed(
@@ -51,23 +50,44 @@ class OpenAIModule(DetectModule):
     def run(self, ctx: DetectContext) -> list[ChangeSignal]:
         warnings: list[str] = ctx.extra.setdefault("warnings", [])
         verbose_warnings: list[str] = ctx.extra.setdefault("verbose_warnings", [])
+        client_state = ctx.package_states.get("openai")
         signals: list[ChangeSignal] = []
         for worker_cls in ALL_WORKERS:
             worker = worker_cls()
             try:
-                raw_list = worker.run(demo=ctx.demo)
+                raw_list = worker.run(demo=ctx.demo, client_state=client_state)
             except Exception as exc:
                 warnings.append(f"openai worker {worker.name}: {exc}")
                 continue
             if not raw_list and not ctx.demo:
                 msg = f"openai worker {worker.name}: returned 0 signals"
-                if worker.name == "ModelPollingWorker":
-                    warnings.append(
-                        "openai worker ModelPollingWorker: no signals "
-                        "(set OPENAI_API_KEY for live /v1/models polling)"
-                    )
-                elif worker.name in _ALWAYS_WARN_EMPTY:
-                    warnings.append(msg)
+                if isinstance(worker, ModelPollingWorker):
+                    reason = worker.last_skip_reason
+                    if reason == "missing_api_key":
+                        warnings.append(
+                            "openai worker ModelPollingWorker: no signals "
+                            "(set OPENAI_API_KEY for live /v1/models polling)"
+                        )
+                    elif reason == "fetch_failed":
+                        warnings.append(
+                            "openai worker ModelPollingWorker: "
+                            "GET /v1/models failed (check OPENAI_API_KEY / network)"
+                        )
+                    elif reason == "no_client_models":
+                        verbose_warnings.append(
+                            "openai worker ModelPollingWorker: no client model ids "
+                            "(empty means unknown, not all-clear)"
+                        )
+                    else:
+                        verbose_warnings.append(msg)
+                elif isinstance(worker, SDKReleaseWorker):
+                    reason = worker.last_skip_reason
+                    if reason == "no_installed_version":
+                        verbose_warnings.append(
+                            "openai worker SDKReleaseWorker: no installed openai version"
+                        )
+                    else:
+                        verbose_warnings.append(msg)
                 else:
                     verbose_warnings.append(msg)
             for raw in raw_list:

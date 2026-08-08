@@ -6,6 +6,12 @@ Command: `conduit detect` (also the first stage of `conduit run`).
 
 ## Sources
 
+### 0. Client package state (pre-step)
+
+Before vendor modules run, Conduit builds a **`PackageClientState`** per applicable package (installed version, model ids / API tokens found in the repo, import files, ecosystems). Regex always; optional LLM enrichment when configured. Empty model lists mean **unknown**, not safe.
+
+Vendor modules consume this as the client baseline. See [Detect modules](detect-modules.md).
+
 ### 1. Lockfile / manifest git diff
 
 Conduit diffs watched files against `--base-ref` (or `HEAD~1` / merge-base heuristics when omitted):

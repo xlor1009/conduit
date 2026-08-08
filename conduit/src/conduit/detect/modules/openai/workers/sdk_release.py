@@ -1,4 +1,4 @@
-"""SDKReleaseWorker: detect major semver bumps / rc tags on official SDKs."""
+"""SDKReleaseWorker: major/prerelease SDK bumps vs client's installed version."""
 
 from __future__ import annotations
 
@@ -10,8 +10,9 @@ from typing import Any
 import httpx
 from packaging.version import InvalidVersion, Version
 
+from conduit.detect.client_state import PackageClientState
 from conduit.detect.modules.openai.models_legacy import ChangeType, RawSignal, Severity
-from conduit.detect.modules.openai.workers.base import Worker, data_dir, fixtures_dir
+from conduit.detect.modules.openai.workers.base import Worker, fixtures_dir
 
 TAG_RE = re.compile(r"^v?(?P<version>\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.]+)?)$")
 
@@ -20,12 +21,10 @@ DEFAULT_REPOS: dict[str, dict[str, Any]] = {
     "openai/openai-python": {
         "package": "openai",
         "ecosystems": ["pip", "pyproject"],
-        "previous_tag": "v0.28.1",
     },
     "openai/openai-node": {
         "package": "openai",
         "ecosystems": ["npm"],
-        "previous_tag": "v3.3.0",
     },
 }
 
@@ -76,24 +75,59 @@ def _load_repo_registry() -> dict[str, dict[str, Any]]:
     return dict(DEFAULT_REPOS)
 
 
+def _ecosystems_match(meta: dict[str, Any], client_ecosystems: list[str]) -> bool:
+    wanted = {str(e).lower() for e in (meta.get("ecosystems") or [])}
+    if not wanted:
+        return True
+    # Treat pyproject as pip for matching
+    have = {e.lower() for e in client_ecosystems}
+    if "pip" in have:
+        have.add("pyproject")
+    if "pyproject" in have:
+        have.add("pip")
+    if not have:
+        # Unknown ecosystem: allow a single comparison path (prefer pip registry entries)
+        return "pip" in wanted or "pyproject" in wanted
+    return bool(wanted & have)
+
+
 class SDKReleaseWorker(Worker):
     name = "SDKReleaseWorker"
 
-    def run(self, *, demo: bool = False) -> list[RawSignal]:
-        repos = _load_repo_registry()
-        snapshot_path = data_dir() / ".sdk-tags-snapshot.json"
-        prior: dict[str, str] = {}
-        if snapshot_path.is_file():
-            try:
-                prior = json.loads(snapshot_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                prior = {}
+    def __init__(self) -> None:
+        self.last_skip_reason: str | None = None
 
+    def run(
+        self,
+        *,
+        demo: bool = False,
+        client_state: PackageClientState | None = None,
+    ) -> list[RawSignal]:
+        self.last_skip_reason = None
+        installed_raw = (
+            (client_state.installed_version if client_state else None) or ""
+        ).strip()
+        if not installed_raw:
+            self.last_skip_reason = "no_installed_version"
+            return []
+
+        installed_v = _parse_version(installed_raw)
+        if installed_v is None:
+            # Allow bare versions like 1.40.0 without v prefix (already handled) or 1.40
+            try:
+                installed_v = Version(installed_raw.lstrip("v"))
+            except InvalidVersion:
+                self.last_skip_reason = "unparseable_installed_version"
+                return []
+
+        client_ecosystems = list(client_state.ecosystems) if client_state else []
+        repos = _load_repo_registry()
         signals: list[RawSignal] = []
-        next_snapshot: dict[str, str] = dict(prior)
+        seen_packages: set[str] = set()
 
         for repo, meta in repos.items():
-            previous_tag = prior.get(repo) or meta.get("previous_tag", "v0.0.0")
+            if not _ecosystems_match(meta, client_ecosystems):
+                continue
             if demo:
                 latest_tag = meta.get("latest_tag")
             else:
@@ -101,44 +135,48 @@ class SDKReleaseWorker(Worker):
             if not latest_tag:
                 continue
 
-            prev_v = _parse_version(str(previous_tag))
             latest_v = _parse_version(str(latest_tag))
-            if not prev_v or not latest_v:
+            if not latest_v:
                 continue
 
-            package = meta.get("package", repo.split("/")[-1])
+            package = str(meta.get("package") or repo.split("/")[-1])
+            pkg_key = package.lower()
+            if pkg_key in seen_packages:
+                continue
             ecosystems = meta.get("ecosystems", ["pip"])
-            next_snapshot[repo] = str(latest_tag)
 
-            if _is_major_bump(prev_v, latest_v) or _is_prerelease(str(latest_tag), latest_v):
-                severity = (
-                    Severity.CRITICAL if _is_major_bump(prev_v, latest_v) else Severity.WARNING
+            major = _is_major_bump(installed_v, latest_v)
+            pre = _is_prerelease(str(latest_tag), latest_v)
+            if not (major or (pre and latest_v > installed_v)):
+                continue
+
+            seen_packages.add(pkg_key)
+            severity = Severity.CRITICAL if major else Severity.WARNING
+            signals.append(
+                RawSignal(
+                    vendor="openai",
+                    change_type=ChangeType.SDK_MAJOR_BUMP,
+                    severity=severity,
+                    affected_pattern=package,
+                    replacement_pattern=str(latest_v.base_version),
+                    source_url=f"https://github.com/{repo}/releases/tag/{latest_tag}",
+                    description=(
+                        f"SDK {repo} latest {latest_tag} is ahead of client "
+                        f"installed {installed_raw}"
+                        + (" (prerelease)" if pre else "")
+                    ),
+                    extra={
+                        "package": package,
+                        "from_version": str(installed_v.base_version),
+                        "to_version": str(latest_v.base_version),
+                        "ecosystems": ecosystems,
+                        "repo": repo,
+                        "latest_tag": latest_tag,
+                    },
                 )
-                signals.append(
-                    RawSignal(
-                        vendor="openai",
-                        change_type=ChangeType.SDK_MAJOR_BUMP,
-                        severity=severity,
-                        affected_pattern=package,
-                        replacement_pattern=str(latest_v.base_version),
-                        source_url=f"https://github.com/{repo}/releases/tag/{latest_tag}",
-                        description=(
-                            f"SDK {repo} bumped {previous_tag} -> {latest_tag}"
-                            + (" (prerelease)" if _is_prerelease(str(latest_tag), latest_v) else "")
-                        ),
-                        extra={
-                            "package": package,
-                            "from_version": str(prev_v.base_version),
-                            "to_version": str(latest_v.base_version),
-                            "ecosystems": ecosystems,
-                            "repo": repo,
-                            "latest_tag": latest_tag,
-                        },
-                    )
-                )
+            )
 
-        if not demo:
-            snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-            snapshot_path.write_text(json.dumps(next_snapshot, indent=2) + "\n", encoding="utf-8")
-
+        if not signals and self.last_skip_reason is None:
+            # Healthy: catalog checked, no major/prerelease ahead of client
+            self.last_skip_reason = None
         return signals

@@ -165,7 +165,6 @@ def detect_cmd(
     console.print(f"[bold]{len(result.signals)}[/bold] signal(s).")
     for warning in result.warnings:
         console.print(f"[yellow]Warning:[/yellow] {warning}")
-        _vprint(warning)
     raise typer.Exit(0 if result.signals else 1)
 
 
@@ -284,7 +283,6 @@ def run_cmd(
     )
     for warning in detected.warnings:
         console.print(f"[yellow]Warning:[/yellow] {warning}")
-        _vprint(warning)
     if _VERBOSE:
         by_type: dict[str, int] = {}
         for s in detected.signals:
