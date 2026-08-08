@@ -48,10 +48,12 @@ git -C examples/demo-consumer diff
 On your own repo:
 
 ```bash
-conduit run --path /path/to/your/repo --package openai
-# or
+conduit run --path /path/to/your/repo --packet openai -v
+# or an explicit packet file
 conduit run --path /path/to/your/repo --packet ./my-packet/conduit-packet.json
 ```
+
+`--packet` accepts a **package name** or a path to `conduit-packet.json`. Use `-v` for version-source and export-delta diagnostics.
 
 More: [Getting started](docs/getting-started.md) · [CLI reference](docs/cli-reference.md)
 

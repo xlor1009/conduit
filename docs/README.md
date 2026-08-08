@@ -6,9 +6,9 @@ Deep dives for every major part of the system. Start with the [root README](../R
 |-----|--------|
 | [Getting started](getting-started.md) | Install, demo run, first real-repo run |
 | [Architecture](architecture.md) | End-to-end pipeline and design principles |
-| [Detection](detection.md) | Lockfile diffs, manifests, version jumps |
+| [Detection](detection.md) | Lockfile diffs, manifests (`read_installed`), version jumps |
 | [Pruning & export delta](pruning-and-export-delta.md) | Import filter + package API comparison |
-| [Migration packets](migration-packets.md) | Schema, authoring, cache, synthesis |
+| [Migration packets](migration-packets.md) | Schema, `--packet` name/file, version resolution, cache, synthesis |
 | [Codemods](codemods.md) | Rule types and pluggable language engines (Python, JS/TS, Java, Go) |
 | [LLM configuration](llm.md) | OpenAI, Anthropic, Ollama, custom local |
 | [Testing & self-correction](testing-and-self-correct.md) | Test runners, smoke-test gen, retry loop |

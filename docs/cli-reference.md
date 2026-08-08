@@ -7,6 +7,19 @@ conduit --help
 conduit <command> --help
 ```
 
+## Global options
+
+| Option | Description |
+|--------|-------------|
+| `--verbose` / `-v` | Extra diagnostics (packet version sources, export-delta resolve details, etc.) |
+
+Place before or after the subcommand:
+
+```bash
+conduit -v run --path . --packet openai
+conduit run -v --path . --packet openai
+```
+
 ---
 
 ## `conduit run`
@@ -15,11 +28,11 @@ Full pipeline: detect → prune → export delta → packet → apply → test g
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--path` | `.` | Repo root |
+| `--path` | `.` | Repo root (must be a directory). On Windows prefer forward slashes or quotes if backslashes get stripped. |
 | `--base-ref` | none | Git ref for lockfile diff (e.g. `origin/main`) |
 | `--package` | auto | Package to migrate |
-| `--module` | all applicable | Restrict detect modules |
-| `--packet` | cache/synth | Path to `conduit-packet.json` |
+| `--module` | auto | Restrict detect modules (if omitted and a package name is known, Conduit uses a matching detect module when one exists) |
+| `--packet` | cache/synth | Path to an existing `conduit-packet.json`, **or** a package name (e.g. `openai`, `stripe`) |
 | `--skip-tests` | false | Skip test gen + verify |
 | `--skip-pr` | false | Do not open a PR |
 | `--no-push` | false | Do not push remote |
@@ -27,6 +40,18 @@ Full pipeline: detect → prune → export delta → packet → apply → test g
 | `--skip-lockfile` | false | Modules only |
 | `--skip-export-delta` | false | Skip export compare / prune |
 | `--max-retries` | `5` | Self-correct attempts |
+| `--verbose` / `-v` | false | Same as global verbose |
+
+### `--packet` resolution
+
+1. If the value is an **existing file** → load that packet JSON.
+2. Otherwise treat it as a **package name** → same idea as `--package <name>`: detect/synthesize a packet for that package.
+3. If both `--packet <file>` and `--package` disagree on the package field, the **packet file** wins (with a warning).
+4. If `--packet <name>` and `--package` disagree, **`--package`** wins (with a warning).
+
+### Version defaults and warnings
+
+When synthesizing a packet (not loading a file), Conduit resolves `from_version` / `to_version` from detect signals, then manifests, then `DEPENDENCY_BUMP` rules. Placeholder versions (`0.0.0` / `1.0.0`) or the offline openai fixture trigger a **yellow warning**. Use `-v` to see sources (`manifest`, `signal`, `rule`, `fixture`, `placeholder`).
 
 ---
 
@@ -55,7 +80,7 @@ Apply a packet only.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--path` | `.` | Repo root |
-| `--packet` | required | Packet path |
+| `--packet` | required | Packet **file** path |
 | `--dry-run` | false | Print changes without writing |
 
 ---
@@ -67,7 +92,7 @@ Run tests + self-correct using a packet for heuristic/LLM context.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--path` | `.` | Repo root |
-| `--packet` | openai fixture if omitted | Packet path |
+| `--packet` | openai fixture if omitted | Packet **file** path |
 | `--max-retries` | `5` | |
 
 ---

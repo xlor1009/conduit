@@ -86,6 +86,37 @@ def _pick_package(signals, package: Optional[str]) -> str | None:
     return packages[0] if packages else None
 
 
+def _resolve_packet_arg(
+    packet: Optional[str],
+) -> tuple[Optional[Path], Optional[str]]:
+    """
+    Interpret --packet as an existing packet file path, or else a package name.
+    Returns (packet_file, package_name).
+    """
+    if not packet:
+        return None, None
+    raw = packet.strip()
+    if not raw:
+        return None, None
+    as_path = Path(raw).expanduser()
+    if as_path.is_file():
+        return as_path.resolve(), None
+    # Bare package names must not look like accidental relative paths with separators
+    if any(sep in raw for sep in ("/", "\\")) or raw.endswith(".json"):
+        console.print(f"[red]Packet file not found:[/red] {raw}")
+        raise typer.Exit(2)
+    return None, raw
+
+
+def _detect_module_names_for_package(package: str | None) -> list[str] | None:
+    if not package:
+        return None
+    available = {m.name.lower() for m in load_modules()}
+    if package.lower() in available:
+        return [package]
+    return None
+
+
 @app.command("detect")
 def detect_cmd(
     path: Path = typer.Option(Path("."), "--path"),
@@ -180,7 +211,11 @@ def run_cmd(
     base_ref: Optional[str] = typer.Option(None, "--base-ref"),
     package: Optional[str] = typer.Option(None, "--package"),
     module: Optional[str] = typer.Option(None, "--module"),
-    packet: Optional[Path] = typer.Option(None, "--packet"),
+    packet: Optional[str] = typer.Option(
+        None,
+        "--packet",
+        help="Path to conduit-packet.json, or a package name (e.g. openai)",
+    ),
     skip_tests: bool = typer.Option(False, "--skip-tests"),
     skip_pr: bool = typer.Option(False, "--skip-pr"),
     no_push: bool = typer.Option(False, "--no-push"),
@@ -199,7 +234,16 @@ def run_cmd(
     if verbose:
         _VERBOSE = True
     root = _resolve_root(path)
-    names = [module] if module else None
+    packet_file, packet_package = _resolve_packet_arg(packet)
+
+    pkg_hint = package or packet_package
+    if package and packet_package and package.lower() != packet_package.lower():
+        console.print(
+            f"[yellow]Warning:[/yellow] --package {package!r} differs from "
+            f"--packet package name {packet_package!r}; using --package"
+        )
+
+    names = [module] if module else _detect_module_names_for_package(pkg_hint)
     detected = run_detect(
         root,
         base_ref=base_ref,
@@ -208,29 +252,52 @@ def run_cmd(
         skip_lockfile=skip_lockfile,
         fixture_mode=True,
     )
-    pkg = _pick_package(detected.signals, package)
-    if packet is None and pkg is None:
-        # Offline demo fallback when openai fixtures still produce signals
-        if any(s.package == "openai" for s in detected.signals):
-            pkg = "openai"
-        else:
-            console.print("[green]No migration signals found. Nothing to do.[/green]")
-            raise typer.Exit(0)
+    pkg = _pick_package(detected.signals, pkg_hint)
 
-    if pkg is None:
-        pkg = "openai"
+    if packet_file is not None:
+        pkt_data = json.loads(packet_file.read_text(encoding="utf-8"))
+        file_pkg = str(pkt_data.get("package") or "")
+        if package and file_pkg and package.lower() != file_pkg.lower():
+            console.print(
+                f"[yellow]Warning:[/yellow] --package {package!r} differs from "
+                f"packet file package {file_pkg!r}; using packet file"
+            )
+        pkg = file_pkg or pkg
+        if not pkg:
+            console.print("[red]Packet file has no package field.[/red]")
+            raise typer.Exit(2)
+        ensured = ensure_packet(
+            root,
+            detected.signals,
+            package=pkg,
+            packet_path=packet_file,
+            installed=detected.installed,
+            use_fixture_fallback=True,
+        )
+    else:
+        if pkg is None:
+            if any(s.package == "openai" for s in detected.signals):
+                pkg = "openai"
+            else:
+                console.print("[green]No migration signals found. Nothing to do.[/green]")
+                raise typer.Exit(0)
+        ensured = ensure_packet(
+            root,
+            detected.signals,
+            package=pkg,
+            packet_path=None,
+            installed=detected.installed,
+            use_fixture_fallback=True,
+        )
 
-    pkt = ensure_packet(
-        root,
-        detected.signals,
-        package=pkg,
-        packet_path=packet,
-        use_fixture_fallback=True,
-    )
+    pkt = ensured.packet
+    for warning in ensured.warnings:
+        console.print(f"[yellow]Warning:[/yellow] {warning}")
     console.print(f"Using packet [bold]{pkt.get('packet_id')}[/bold] ({len(pkt.get('rules') or [])} rules)")
     _vprint(
-        f"packet from_version={pkt.get('from_version')!r} "
-        f"to_version={pkt.get('to_version')!r} ecosystem={pkt.get('ecosystem')!r}"
+        f"packet from_version={pkt.get('from_version')!r} ({ensured.from_source}) "
+        f"to_version={pkt.get('to_version')!r} ({ensured.to_source}) "
+        f"ecosystem={pkt.get('ecosystem')!r}"
     )
 
     files = prune_by_imports(root, [pkg])

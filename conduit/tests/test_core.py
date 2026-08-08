@@ -11,8 +11,10 @@ from conduit.detect.modules.discovery import load_modules
 from conduit.export_delta.diff import diff_exports
 from conduit.export_delta.extract import _python_file_exports
 from conduit.llm.client import resolve_provider
-from conduit.packet.synthesize import load_fixture_openai_packet
+from conduit.detect.models import ChangeSignal
+from conduit.packet.synthesize import ensure_packet, load_fixture_openai_packet
 from conduit.packet.validate import validate_packet
+from conduit.main import _resolve_packet_arg
 from conduit.patcher import apply_packet
 from conduit.patcher.ast_attr_call import rename_python_attr, rewrite_python_call
 from conduit.patcher.ast_import_rewrite import rewrite_python_imports
@@ -62,6 +64,80 @@ def test_export_delta_placeholder_version(tmp_path: Path):
     assert "openai==0.0.0" in delta.skipped_reason
     assert delta.diagnostics
     assert "placeholder" in delta.diagnostics[0]
+
+
+def test_resolve_packet_arg_package_name():
+    path, pkg = _resolve_packet_arg("openai")
+    assert path is None
+    assert pkg == "openai"
+
+
+def test_resolve_packet_arg_file(tmp_path: Path):
+    packet_file = tmp_path / "conduit-packet.json"
+    packet_file.write_text("{}", encoding="utf-8")
+    path, pkg = _resolve_packet_arg(str(packet_file))
+    assert path == packet_file.resolve()
+    assert pkg is None
+
+
+def test_ensure_packet_uses_manifest_from_version(tmp_path: Path):
+    signals = [
+        ChangeSignal(
+            source="module:openai",
+            package="openai",
+            change_type="API_BREAKING",
+            suggested_rules=[
+                {
+                    "type": "DEPENDENCY_BUMP",
+                    "package": "openai",
+                    "from_version": "0.28.1",
+                    "to_version": "1.40.0",
+                    "ecosystems": ["pip"],
+                }
+            ],
+        )
+    ]
+    result = ensure_packet(
+        tmp_path,
+        signals,
+        package="openai",
+        installed={"openai": "0.28.1"},
+        use_fixture_fallback=False,
+    )
+    assert result.packet["from_version"] == "0.28.1"
+    assert result.from_source == "manifest"
+    assert result.packet["to_version"] == "1.40.0"
+    assert result.to_source == "rule"
+    assert result.warnings == []
+
+
+def test_ensure_packet_warns_on_placeholder_versions(tmp_path: Path):
+    signals = [
+        ChangeSignal(
+            source="module:acme",
+            package="acme",
+            change_type="API_BREAKING",
+            suggested_rules=[
+                {
+                    "type": "EXACT_STRING_REPLACE",
+                    "match": "old",
+                    "replace": "new",
+                    "target_files": ["*.py"],
+                }
+            ],
+        )
+    ]
+    result = ensure_packet(
+        tmp_path,
+        signals,
+        package="acme",
+        installed={},
+        use_fixture_fallback=False,
+    )
+    assert result.from_source == "placeholder"
+    assert result.to_source == "placeholder"
+    assert any("from_version defaulted" in w for w in result.warnings)
+    assert any("to_version defaulted" in w for w in result.warnings)
 
 
 def test_load_modules_includes_openai():

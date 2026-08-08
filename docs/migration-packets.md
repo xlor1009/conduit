@@ -8,11 +8,11 @@ Schema: [`schema/conduit-packet.schema.json`](../schema/conduit-packet.schema.js
 
 ```json
 {
-  "packet_id": "openai-0.28.1-1.0.0",
+  "packet_id": "openai-0.28.1-1.40.0",
   "package": "openai",
   "ecosystem": "pypi",
   "from_version": "0.28.1",
-  "to_version": "1.0.0",
+  "to_version": "1.40.0",
   "sources": [{ "url": "https://…", "kind": "docs" }],
   "notes": "Optional human notes",
   "rules": [ /* see Codemods */ ]
@@ -21,16 +21,48 @@ Schema: [`schema/conduit-packet.schema.json`](../schema/conduit-packet.schema.js
 
 `ecosystem` is one of: `pypi`, `npm`, `go`, `maven`, `other`.
 
+### Version fields
+
+| Field | Meaning |
+|-------|---------|
+| `from_version` | Version the **consumer currently uses** (or the pre-bump side of a lockfile jump) |
+| `to_version` | Migration **target** version |
+| `packet_id` | Conventionally `{package}-{from_version}-{to_version}` |
+
+These top-level versions also drive **export delta** (downloading both package versions to compare public APIs). Rule-level `DEPENDENCY_BUMP.from_version` / `to_version` can still describe the pin rewrite independently.
+
 ## Where packets come from (`ensure_packet`)
 
 Resolution order in `conduit run`:
 
-1. **`--packet path`** — explicit file
-2. **Cache** — `.conduit/packets/{package}-{from}-{to}.json`
-3. **Synthesize from detect signals** — fold `suggested_rules` into a packet
-4. **OpenAI fixture fallback** — demo packet when package is `openai` and rules are still empty
+1. **`--packet` file path** — if the value names an existing file, load that JSON
+2. **`--packet` package name** — e.g. `--packet openai` (same idea as `--package openai`): synthesize/cache for that package
+3. **Cache** — `.conduit/packets/{package}-{from}-{to}.json`
+4. **Synthesize from detect signals** — fold `suggested_rules` into a packet
+5. **OpenAI fixture fallback** — demo packet when package is `openai` and rules are still empty (warns)
 
-Cached after synthesis so the next run is instant.
+Cached after synthesis so the next run is instant. Explicit packet **files** are never overwritten by version rewriting.
+
+### How `from_version` / `to_version` are chosen (synthesis)
+
+When not loading a packet file:
+
+1. **Signal pair** — first detect signal for the package with both `from_version` and `to_version` (typically a lockfile/manifest jump)
+2. Else **`from_version` from manifests** — current pin via `read_installed()` (`requirements.txt`, `pyproject.toml`, `package.json`, `go.mod`)
+3. Else **`to_version` from signals** or from a `DEPENDENCY_BUMP` rule on those signals
+4. Else placeholders `0.0.0` / `1.0.0` (Conduit prints a **warning**)
+
+After synthesis (or openai fixture load), the packet’s top-level versions and `packet_id` are aligned to the resolved pair.
+
+```bash
+# Package name — seamless for any package that detect can target
+conduit run --path . --packet openai -v
+
+# Explicit packet file
+conduit run --path . --packet ./packets/openai-0.28.1-1.40.0.json
+```
+
+With `-v`, Conduit prints version sources (`manifest`, `signal`, `rule`, `fixture`, `placeholder`, `file`, `cache`).
 
 ## Authoring CLI
 
@@ -73,12 +105,13 @@ See [`examples/sample-packet/conduit-packet.json`](../examples/sample-packet/con
 | Role | Typical action |
 |------|----------------|
 | Vendor / maintainer | Publish a packet next to a breaking release (or open a PR to consumer orgs) |
-| Consumer | Drop packet in `.conduit/packets/` or pass `--packet`; run `conduit run` |
+| Consumer | Drop packet in `.conduit/packets/`, pass `--packet ./file.json`, or `--packet <package-name>`; run `conduit run` |
 
 There is not yet a `conduit packet publish` registry command — share packets via git/HTTP for now.
 
 ## Related docs
 
 - [Codemods](codemods.md)
+- [Pruning & export delta](pruning-and-export-delta.md)
 - [LLM configuration](llm.md) (for `packet synthesize`)
 - [CLI reference](cli-reference.md)

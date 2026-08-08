@@ -18,6 +18,11 @@ Conduit diffs watched files against `--base-ref` (or `HEAD~1` / merge-base heuri
 
 Only packages whose declared version **changed** become `VersionJump` signals. Unchanged dependencies are ignored (Tier 1 isolation).
 
+Separately, Conduit always parses **currently declared** versions from the same manifests via `read_installed()` (`DetectResult.installed`). That map is used to:
+
+- Decide whether a detect module **applies** to this repo
+- Fill packet **`from_version`** when there is no lockfile jump signal (so export delta can fetch the real old package)
+
 By default only **major** bumps are treated as migration candidates (`--majors-only`, on by default). Use `--all-bumps` to include minor/patch.
 
 Ecosystem parsers today:
@@ -50,10 +55,11 @@ See [Detect modules](detect-modules.md).
 `conduit run` picks a package via:
 
 1. `--package` if set
-2. Else prefer `openai` if present in signals
-3. Else first package among signals
+2. Else package name from `--packet <name>` when `--packet` is not a file path
+3. Else prefer `openai` if present in signals
+4. Else first package among signals
 
-Those signals seed packet synthesis when no cached/explicit packet exists.
+Those signals (plus `installed` versions) seed packet synthesis when no cached/explicit packet file exists. See [Migration packets](migration-packets.md).
 
 ## Dependabot / Renovate intercept
 

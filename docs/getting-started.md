@@ -86,22 +86,35 @@ conduit apply \
 # Typical: Dependabot already bumped the lockfile on this branch
 conduit run --path /path/to/your/repo --base-ref origin/main --package openai
 
-# Or supply a packet explicitly
+# Package name as --packet (any package; synthesizes/caches rules from detect)
+conduit run --path /path/to/your/repo --packet openai -v
+
+# Or supply a packet file explicitly
 conduit run --path /path/to/your/repo --packet ./packets/openai-1.0.0.json
 
 # Apply + test locally, no PR
-conduit run --path /path/to/your/repo --packet ./packets/openai-1.0.0.json --skip-pr
+conduit run --path /path/to/your/repo --packet openai --skip-pr
+```
+
+On Windows, prefer forward slashes or quoted paths if backslashes get stripped by the shell:
+
+```bash
+conduit run --path "C:/Users/you/my-repo" --packet openai -v
 ```
 
 Useful flags:
 
 | Flag | Meaning |
 |------|---------|
+| `--packet <name\|file>` | Package name **or** path to `conduit-packet.json` |
+| `-v` / `--verbose` | Show version sources, export-delta diagnostics |
 | `--skip-pr` | Do not open a PR |
 | `--no-push` | Commit locally but do not push |
 | `--skip-tests` | Skip test gen + verify (not recommended) |
 | `--skip-export-delta` | Skip downloading old/new package versions for export compare |
 | `--max-retries N` | Self-correct attempts after test failure (default 5) |
+
+If Conduit must guess placeholder versions (`0.0.0` / `1.0.0`) or fall back to the openai demo fixture, it prints a **warning**. Prefer a real manifest pin + detect signals so export delta can run.
 
 See [CLI reference](cli-reference.md) for the full list.
 

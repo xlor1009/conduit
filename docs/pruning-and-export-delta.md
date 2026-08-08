@@ -20,7 +20,9 @@ If **zero** files match, apply falls back to a broader candidate set (still excl
 
 ## Export delta (Tier 3)
 
-When both `from_version` and `to_version` are known, Conduit:
+Export delta compares the **public API surface** of the dependency at the packet’s `from_version` vs `to_version`, then prefers consumer files that mention changed symbols.
+
+When both versions are resolvable, Conduit:
 
 1. Downloads both package versions into `.conduit/exports/` (via `pip download` or `npm pack`)
 2. Extracts public symbols
@@ -29,7 +31,20 @@ When both `from_version` and `to_version` are known, Conduit:
 3. Diffs → `added`, `removed`, `renamed` (heuristic renames for case / token overlap)
 4. Further prefers files that mention changed symbols
 
-If download/extract fails, Conduit **logs and continues** with the import-pruned set (`Export delta skipped: …`).
+### Version inputs
+
+Export delta reads the **packet top-level** versions (not only lockfile jumps):
+
+- `from_version` — ideally the version the project is on now (from manifests / detect)
+- `to_version` — migration target (from detect signals or `DEPENDENCY_BUMP` rules)
+
+If either side cannot be fetched (missing placeholder like `0.0.0`, network/pip failure, etc.), Conduit **soft-fails** and continues with the import-pruned set:
+
+```text
+Export delta skipped: could not resolve openai==0.0.0 (pypi)
+```
+
+With `--verbose` / `-v`, Conduit also prints per-side diagnostics (e.g. placeholder vs `pip download` stderr).
 
 Disable with:
 
@@ -55,5 +70,6 @@ Even after pruning, each rule application can require “vendor context” in th
 
 ## Related docs
 
+- [Migration packets](migration-packets.md) (how `from_version` / `to_version` are chosen)
 - [Architecture](architecture.md)
 - [Codemods](codemods.md)

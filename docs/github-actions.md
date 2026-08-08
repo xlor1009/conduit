@@ -35,7 +35,7 @@ Runs `conduit run` on a schedule. In *this* monorepo it also exercises the demo 
 
 [`conduit/action.yml`](../conduit/action.yml) installs Conduit with `[llm,langs,dev]` and runs `conduit run` with inputs:
 
-- `path`, `base-ref`, `package`, `packet`, `skip-pr`, `python-version`
+- `path`, `base-ref`, `package`, `packet` (file path **or** package name), `skip-pr`, `python-version`
 
 Pass-through env for LLMs:
 

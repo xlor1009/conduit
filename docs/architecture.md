@@ -27,7 +27,7 @@ Conduit is a **self-hosted migration engine**. It does not rely on a central pac
 └────────┬────────┘
          ▼
 ┌─────────────────┐
-│ 4. Packet       │  --packet | .conduit/packets cache | synth from signals
+│ 4. Packet       │  --packet file | --packet <pkg name> | cache | synth
 └────────┬────────┘
          ▼
 ┌─────────────────┐
@@ -42,6 +42,8 @@ Conduit is a **self-hosted migration engine**. It does not rely on a central pac
 │ 7. PR           │  branch conduit/upgrade-{pkg}-{ver} → gh pr create
 └─────────────────┘
 ```
+
+Packet `from_version` prefers lockfile jump signals, else the version declared in manifests (`read_installed`). `to_version` comes from signals or `DEPENDENCY_BUMP` rules. See [Migration packets](migration-packets.md).
 
 ## Tiered scoping (why it stays fast)
 
@@ -70,7 +72,7 @@ AST work runs only on the surviving file set.
 
 ## What is *not* in the hot path
 
-- A hosted “Central Migration Registry” — packets live in-repo (`.conduit/packets/`) or are passed with `--packet`.
+- A hosted “Central Migration Registry” — packets live in-repo (`.conduit/packets/`), are passed as `--packet ./file.json`, or are synthesized from `--packet <package-name>` / detect signals.
 - LLM rewriting every file on every run — apply is rule-based unless tests fail and an LLM is configured.
 
 ## Related docs
