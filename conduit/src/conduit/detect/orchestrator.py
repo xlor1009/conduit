@@ -32,6 +32,7 @@ def run_detect(
     skip_modules: bool = False,
     skip_lockfile: bool = False,
     demo: bool = False,
+    verbose: bool = False,
 ) -> DetectResult:
     root = root.resolve()
     installed = read_installed(root)
@@ -50,6 +51,7 @@ def run_detect(
             repo_root=root,
             installed=installed,
             demo=demo,
+            verbose=verbose,
         )
         for mod in load_modules(names=module_names):
             if (
@@ -63,6 +65,9 @@ def run_detect(
             except Exception as exc:
                 warnings.append(f"detect module {mod.name}: {exc}")
             warnings.extend(list(ctx.extra.get("warnings") or []))
+            if verbose:
+                warnings.extend(list(ctx.extra.get("verbose_warnings") or []))
             ctx.extra["warnings"] = []
+            ctx.extra["verbose_warnings"] = []
 
     return DetectResult(signals=signals, installed=installed, warnings=warnings)

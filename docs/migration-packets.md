@@ -41,7 +41,9 @@ Resolution order in `conduit run`:
 4. **Synthesize from detect signals** — fold `suggested_rules` into a packet
 5. **OpenAI fixture fallback** — only when `--demo` is set and package is `openai` with empty rules (warns)
 
-Cached after synthesis so the next run is instant. Explicit packet **files** are never overwritten by version rewriting. Use `--refresh-packet` when live detect has new signals and you want to rebuild the cached packet for the same version pair.
+Cached after synthesis so the next run is instant. Explicit packet **files** are never overwritten by version rewriting. Use `--refresh-packet` when live detect has new signals and you want to rebuild the cached packet for the same version pair — **required after detect/normalize or LLM-evidence changes**, otherwise `conduit run` may keep applying a stale cached packet.
+
+When an LLM is configured (not `--demo`), synthesis also runs **evidence-grounded enrichment**: fetch module seed docs + web search, ask the model for additional `rules`, merge onto scrape rules. See [LLM configuration](llm.md).
 
 ### How `from_version` / `to_version` are chosen (synthesis)
 

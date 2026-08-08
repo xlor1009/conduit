@@ -4,8 +4,16 @@ from __future__ import annotations
 
 from conduit.detect.models import ChangeSignal
 from conduit.detect.modules.base import DetectContext, DetectModule
+from conduit.detect.modules.openai.evidence_seeds import (
+    OPENAI_EVIDENCE_HOSTS,
+    OPENAI_EVIDENCE_SEEDS,
+    openai_evidence_queries,
+)
 from conduit.detect.modules.openai.normalize import default_rules_for, signal_to_event
 from conduit.detect.modules.openai.workers import ALL_WORKERS
+
+# Clean empty results are noisy unless verbose; these stay actionable always.
+_ALWAYS_WARN_EMPTY = frozenset({"ModelPollingWorker"})
 
 
 def _align_dependency_bump_from_installed(
@@ -31,8 +39,18 @@ class OpenAIModule(DetectModule):
     name = "openai"
     packages = ["openai"]
 
+    def evidence_seeds(self) -> list[str]:
+        return list(OPENAI_EVIDENCE_SEEDS)
+
+    def evidence_hosts(self) -> list[str]:
+        return sorted(OPENAI_EVIDENCE_HOSTS)
+
+    def evidence_queries(self, *, from_version: str, to_version: str) -> list[str]:
+        return openai_evidence_queries(from_version, to_version)
+
     def run(self, ctx: DetectContext) -> list[ChangeSignal]:
         warnings: list[str] = ctx.extra.setdefault("warnings", [])
+        verbose_warnings: list[str] = ctx.extra.setdefault("verbose_warnings", [])
         signals: list[ChangeSignal] = []
         for worker_cls in ALL_WORKERS:
             worker = worker_cls()
@@ -42,15 +60,16 @@ class OpenAIModule(DetectModule):
                 warnings.append(f"openai worker {worker.name}: {exc}")
                 continue
             if not raw_list and not ctx.demo:
+                msg = f"openai worker {worker.name}: returned 0 signals"
                 if worker.name == "ModelPollingWorker":
                     warnings.append(
                         "openai worker ModelPollingWorker: no signals "
                         "(set OPENAI_API_KEY for live /v1/models polling)"
                     )
+                elif worker.name in _ALWAYS_WARN_EMPTY:
+                    warnings.append(msg)
                 else:
-                    warnings.append(
-                        f"openai worker {worker.name}: returned 0 signals"
-                    )
+                    verbose_warnings.append(msg)
             for raw in raw_list:
                 event = signal_to_event(raw)
                 rules = event.rules or default_rules_for(raw)
@@ -84,4 +103,5 @@ class OpenAIModule(DetectModule):
                         hints={"event_id": event.event_id, "vendor": event.vendor},
                     )
                 )
+
         return signals

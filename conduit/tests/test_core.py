@@ -108,7 +108,7 @@ def test_ensure_packet_uses_manifest_from_version(tmp_path: Path):
     assert result.from_source == "manifest"
     assert result.packet["to_version"] == "1.40.0"
     assert result.to_source == "rule"
-    assert result.warnings == []
+    assert not any("defaulted" in w for w in result.warnings)
 
 
 def test_ensure_packet_warns_on_placeholder_versions(tmp_path: Path):

@@ -33,11 +33,17 @@ Discovery: [`conduit/src/conduit/detect/modules/discovery.py`](../conduit/src/co
 
 | Worker | Live source | Demo fixture |
 |--------|-------------|--------------|
-| OpenAPI diff | `openai/openai-openapi` git clone | `fixtures/openai/openapi/` |
+| OpenAPI diff | Fixture `previous.yaml` (baseline) vs freshly cloned `openai/openai-openapi` latest | `fixtures/openai/openapi/` (previous vs latest) |
 | Deprecation scraper | `https://platform.openai.com/docs/deprecations` | `fixtures/openai/deprecations/` |
 | Model polling | `GET /v1/models` (needs `OPENAI_API_KEY`) | `fixtures/openai/models/` |
 | Changelog parser | platform changelog page | `fixtures/openai/changelogs/` |
 | SDK release | GitHub releases API | `fixtures/openai/sdk_releases/` (also lists repos to watch) |
+
+Normalize emits apply rules **only when grounded**: model A→B when scrape states both; path replace only when both `/v1/...` sides are known; `AST_PARAM_RENAME` only when the signal carries explicit `function_target`(s). No path-fallback maps and no invented ChatCompletion target lists.
+
+Call-shape / successor gaps are filled by **evidence + LLM packet enrichment** (module seed URLs + web search) when an LLM is configured — see [LLM configuration](llm.md).
+
+Clean “0 signals” from OpenAPI/changelog/SDK workers are **verbose-only** (`-v`); missing `OPENAI_API_KEY` for model polling still warns always.
 
 Fixtures and the SDK repo list are **info-point / offline** data. Model replacement strings should come from live deprecation pages, not hardcoded module maps.
 

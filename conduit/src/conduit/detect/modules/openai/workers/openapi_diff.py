@@ -73,7 +73,6 @@ def _diff_paths(previous: dict[str, Any], latest: dict[str, Any]) -> list[RawSig
                     extra={
                         "old_param": old_p,
                         "new_param": new_p,
-                        "function_target": "openai.chat.completions.create",
                         "path": path,
                     },
                 )
@@ -168,12 +167,21 @@ class OpenAPIDiffWorker(Worker):
         return signals
 
     def _live_diff(self) -> list[RawSignal]:
+        """Diff committed fixture baseline vs freshly cloned latest OpenAPI.
+
+        HEAD vs HEAD~1 often has no path/param delta; the fixture previous.yaml
+        is the stable info-point for consumer-breaking removals/renames.
+        """
+        fixture_prev = fixtures_dir() / "openapi" / "previous.yaml"
+        if not fixture_prev.is_file():
+            return []
+
         repo = "https://github.com/openai/openai-openapi.git"
         with tempfile.TemporaryDirectory(prefix="oasdiff-") as tmp:
             tmp_path = Path(tmp)
             try:
                 subprocess.run(
-                    ["git", "clone", "--depth", "50", repo, str(tmp_path / "repo")],
+                    ["git", "clone", "--depth", "1", repo, str(tmp_path / "repo")],
                     check=True,
                     capture_output=True,
                     text=True,
@@ -188,24 +196,9 @@ class OpenAPIDiffWorker(Worker):
             if not candidates:
                 return []
             latest = candidates[0]
-            rel = latest.relative_to(repo_path).as_posix()
-            # Preserve suffix so loaders sniff yaml vs json correctly
-            prev_tmp = tmp_path / f"previous-{latest.name}"
-            try:
-                shown = subprocess.run(
-                    ["git", "show", f"HEAD~1:{rel}"],
-                    cwd=repo_path,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-                prev_tmp.write_text(shown.stdout, encoding="utf-8")
-            except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                return []
 
-            signals = _diff_paths(_load_openapi(prev_tmp), _load_openapi(latest))
-            oas = _run_oasdiff(prev_tmp, latest)
+            signals = _diff_paths(_load_openapi(fixture_prev), _load_openapi(latest))
+            oas = _run_oasdiff(fixture_prev, latest)
             if oas:
                 keys = {(s.change_type, s.affected_pattern) for s in signals}
                 for s in oas:

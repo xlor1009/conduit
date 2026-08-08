@@ -1,4 +1,7 @@
-"""Normalize raw worker signals into unified registry events with rules."""
+"""Normalize raw worker signals into unified registry events with rules.
+
+Only emit apply rules when both sides are known (no invented path/call targets).
+"""
 
 from __future__ import annotations
 
@@ -17,6 +20,8 @@ from conduit.detect.modules.openai.models_legacy import (
 DEFAULT_CODE_GLOBS = ["*.py", "*.ts", "*.js", "*.yaml", "*.yml", "*.json", ".env*"]
 AST_GLOBS = ["*.py", "*.ts", "*.js"]
 
+_PATH_RE = re.compile(r"^/v1/[A-Za-z0-9/_\-{}]+$")
+
 
 def _slug(value: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9]+", "_", value.strip().lower()).strip("_")
@@ -33,6 +38,24 @@ def make_event_id(signal: RawSignal) -> str:
         f"{signal.replacement_pattern}|{signal.deadline}".encode()
     ).hexdigest()[:6]
     return f"{base}_{digest}"
+
+
+def _looks_like_api_path(value: str | None) -> bool:
+    if not value:
+        return False
+    return bool(_PATH_RE.match(value.strip()))
+
+
+def _param_function_targets(signal: RawSignal) -> list[str]:
+    """Return explicit targets only — never invent ChatCompletion vs modern paths."""
+    extra = signal.extra or {}
+    targets = extra.get("function_targets")
+    if isinstance(targets, list) and targets:
+        return [str(t) for t in targets if t]
+    single = extra.get("function_target")
+    if single:
+        return [str(single)]
+    return []
 
 
 def default_rules_for(signal: RawSignal) -> list[dict[str, Any]]:
@@ -59,19 +82,18 @@ def default_rules_for(signal: RawSignal) -> list[dict[str, Any]]:
     if signal.change_type == ChangeType.PARAM_RENAME:
         old_param = signal.extra.get("old_param") or signal.affected_pattern
         new_param = signal.extra.get("new_param") or signal.replacement_pattern
-        function_target = signal.extra.get(
-            "function_target", "openai.chat.completions.create"
-        )
-        if old_param and new_param:
-            rules.append(
-                {
-                    "type": "AST_PARAM_RENAME",
-                    "target_files": list(AST_GLOBS),
-                    "function_target": function_target,
-                    "old_param": old_param,
-                    "new_param": new_param,
-                }
-            )
+        targets = _param_function_targets(signal)
+        if old_param and new_param and targets:
+            for function_target in targets:
+                rules.append(
+                    {
+                        "type": "AST_PARAM_RENAME",
+                        "target_files": list(AST_GLOBS),
+                        "function_target": function_target,
+                        "old_param": old_param,
+                        "new_param": new_param,
+                    }
+                )
 
     if signal.change_type == ChangeType.SDK_MAJOR_BUMP:
         package = signal.extra.get("package", signal.affected_pattern)
@@ -88,8 +110,18 @@ def default_rules_for(signal: RawSignal) -> list[dict[str, Any]]:
         )
 
     if signal.change_type == ChangeType.API_BREAKING:
-        # Informational by default; workers may attach suggested_rules for renames
-        pass
+        old_path = signal.affected_pattern
+        new_path = signal.replacement_pattern
+        # Both sides required — do not invent successors.
+        if _looks_like_api_path(old_path) and _looks_like_api_path(new_path):
+            rules.append(
+                {
+                    "type": "EXACT_STRING_REPLACE",
+                    "target_files": list(DEFAULT_CODE_GLOBS),
+                    "match": old_path.strip(),
+                    "replace": new_path.strip(),
+                }
+            )
 
     return rules
 
@@ -118,17 +150,10 @@ def merge_signals(
     version: str = "1.0.0",
 ) -> RegistryDocument:
     events: list[RegistryEvent] = []
-    seen: set[str] = set()
     for signal in signals:
-        event = signal_to_event(signal)
-        if event.event_id in seen:
-            continue
-        seen.add(event.event_id)
-        events.append(event)
-
-    events.sort(key=lambda e: (e.vendor, e.change_type, e.event_id))
+        events.append(signal_to_event(signal))
     return RegistryDocument(
-        generated_at=generated_at,
         version=version,
+        generated_at=generated_at,
         events=events,
     )

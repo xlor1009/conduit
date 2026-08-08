@@ -57,7 +57,6 @@ def parse_changelog_text(text: str, source_url: str | None = None) -> list[RawSi
                 extra={
                     "old_param": old_p,
                     "new_param": new_p,
-                    "function_target": "openai.chat.completions.create",
                 },
             )
         )
@@ -78,7 +77,6 @@ def parse_changelog_text(text: str, source_url: str | None = None) -> list[RawSi
                 extra={
                     "old_param": old_p,
                     "new_param": new_p,
-                    "function_target": "openai.chat.completions.create",
                 },
             )
         )
@@ -148,7 +146,6 @@ def _llm_extract(text: str) -> list[RawSignal]:
                 extra={
                     "old_param": item.get("affected_pattern"),
                     "new_param": item.get("replacement_pattern"),
-                    "function_target": "openai.chat.completions.create",
                 },
             )
         )

@@ -187,6 +187,8 @@ def synthesize_from_docs(
             "packet_id, package, ecosystem, from_version, to_version, sources, notes, rules. "
             "Rules may use EXACT_STRING_REPLACE, REGEX_REPLACE, AST_PARAM_RENAME, "
             "DEPENDENCY_BUMP, AST_IMPORT_REWRITE, AST_ATTR_RENAME, AST_CALL_REWRITE. "
+            "Only propose replacements grounded in the provided changelog/docs. "
+            "If a successor is unknown, put it in notes — do not invent paths or callees. "
             "Reply with JSON only."
         ),
         "package": package,
@@ -199,7 +201,7 @@ def synthesize_from_docs(
     }
     try:
         data = client.complete_json(
-            system="You author Conduit migration packets. JSON only.",
+            system="You author Conduit migration packets. JSON only. Never invent API successors.",
             user=json.dumps(prompt),
         )
         if data and not validate_packet(data):
@@ -210,6 +212,228 @@ def synthesize_from_docs(
     except Exception:
         pass
     return packet
+
+
+_EVIDENCE_SYSTEM = (
+    "You are a Staff Software Engineer authoring Conduit Migration Packets. "
+    "Emit JSON only with keys: notes (string), sources (list of {url, kind}), rules (list). "
+    "Allowed rule types: EXACT_STRING_REPLACE, REGEX_REPLACE, AST_PARAM_RENAME, "
+    "DEPENDENCY_BUMP, AST_IMPORT_REWRITE, AST_ATTR_RENAME, AST_CALL_REWRITE. "
+    "Every path replace, param rename, and call rewrite MUST be supported by the evidence "
+    "excerpts (cite URLs in notes). "
+    "For AST_PARAM_RENAME include explicit function_target(s) taken from evidence — "
+    "do not assume ChatCompletion vs chat.completions. "
+    "If a removed endpoint/param has no stated successor, mention it in notes and do NOT "
+    "invent replace/new_callee/new_param. "
+    "Do not invent model ids."
+)
+
+
+def _rule_dedupe_key(rule: dict[str, Any]) -> str:
+    rtype = str(rule.get("type") or "")
+    if rtype == "EXACT_STRING_REPLACE":
+        return json.dumps(
+            {"type": rtype, "match": rule.get("match"), "replace": rule.get("replace")},
+            sort_keys=True,
+        )
+    if rtype == "AST_PARAM_RENAME":
+        return json.dumps(
+            {
+                "type": rtype,
+                "function_target": rule.get("function_target"),
+                "old_param": rule.get("old_param"),
+                "new_param": rule.get("new_param"),
+            },
+            sort_keys=True,
+        )
+    if rtype == "AST_CALL_REWRITE":
+        return json.dumps(
+            {
+                "type": rtype,
+                "old_callee": rule.get("old_callee"),
+                "new_callee": rule.get("new_callee"),
+            },
+            sort_keys=True,
+        )
+    if rtype == "AST_ATTR_RENAME":
+        return json.dumps(
+            {
+                "type": rtype,
+                "old_attr": rule.get("old_attr"),
+                "new_attr": rule.get("new_attr"),
+            },
+            sort_keys=True,
+        )
+    return json.dumps(rule, sort_keys=True)
+
+
+def merge_packet_rules(
+    base_rules: list[dict[str, Any]],
+    llm_rules: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep grounded base rules; append LLM rules; scrape EXACT match wins on conflict."""
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    exact_matches: set[str] = set()
+    for rule in base_rules:
+        key = _rule_dedupe_key(rule)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(rule)
+        if rule.get("type") == "EXACT_STRING_REPLACE" and rule.get("match"):
+            exact_matches.add(str(rule["match"]))
+    for rule in llm_rules:
+        if (
+            rule.get("type") == "EXACT_STRING_REPLACE"
+            and rule.get("match")
+            and str(rule["match"]) in exact_matches
+        ):
+            continue
+        key = _rule_dedupe_key(rule)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(rule)
+    return out
+
+
+def _signal_summary(signals: list[ChangeSignal], package: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for s in signals:
+        if s.package.lower() != package.lower():
+            continue
+        rows.append(
+            {
+                "change_type": s.change_type,
+                "affected_pattern": s.affected_pattern,
+                "replacement_pattern": s.replacement_pattern,
+                "description": s.description,
+                "source_url": s.source_url,
+                "suggested_rule_count": len(s.suggested_rules),
+            }
+        )
+    return rows[:200]
+
+
+def _module_evidence_meta(
+    package: str, from_version: str, to_version: str
+) -> tuple[list[str], list[str], list[str]]:
+    from conduit.detect.modules.discovery import load_modules
+
+    for mod in load_modules():
+        pkgs = {x.lower() for x in mod.packages}
+        if package.lower() in pkgs or mod.name.lower() == package.lower():
+            return (
+                list(mod.evidence_seeds()),
+                list(mod.evidence_hosts()),
+                list(
+                    mod.evidence_queries(
+                        from_version=from_version, to_version=to_version
+                    )
+                ),
+            )
+    return [], [], []
+
+
+def synthesize_from_evidence(
+    *,
+    package: str,
+    from_version: str,
+    to_version: str,
+    ecosystem: str,
+    signals: list[ChangeSignal],
+    base: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """
+    Fetch evidence + LLM-author rules; merge onto base packet.
+    Returns (packet, warnings).
+    """
+    from conduit.llm import get_llm_client
+    from conduit.packet.evidence import build_evidence, evidence_as_prompt_text
+
+    warnings: list[str] = []
+    client = get_llm_client()
+    if client is None:
+        warnings.append("LLM packet enrichment skipped (no LLM configured)")
+        return base, warnings
+
+    seeds, hosts, queries = _module_evidence_meta(package, from_version, to_version)
+    if not seeds and not queries:
+        warnings.append(
+            f"LLM packet enrichment skipped (no evidence seeds for package {package!r})"
+        )
+        return base, warnings
+
+    docs, fetch_warnings = build_evidence(
+        seed_urls=seeds,
+        allow_hosts=hosts or ["platform.openai.com", "developers.openai.com", "github.com"],
+        search_queries=queries,
+    )
+    warnings.extend(fetch_warnings)
+    if not docs:
+        return base, warnings
+
+    evidence_text = evidence_as_prompt_text(docs)
+    user_payload = {
+        "package": package,
+        "from_version": from_version,
+        "to_version": to_version,
+        "ecosystem": ecosystem,
+        "detect_signals": _signal_summary(signals, package),
+        "existing_rule_count": len(base.get("rules") or []),
+        "evidence": evidence_text,
+    }
+    try:
+        data = client.complete_json(
+            system=_EVIDENCE_SYSTEM,
+            user=json.dumps(user_payload),
+        )
+    except Exception as exc:
+        warnings.append(f"LLM packet enrichment failed: {exc}")
+        return base, warnings
+
+    if not data or not isinstance(data, dict):
+        warnings.append("LLM packet enrichment returned empty/invalid JSON")
+        return base, warnings
+
+    llm_rules = data.get("rules")
+    if not isinstance(llm_rules, list):
+        warnings.append("LLM packet enrichment missing rules list")
+        return base, warnings
+
+    probe = {
+        "packet_id": base.get("packet_id"),
+        "package": base.get("package", package),
+        "ecosystem": base.get("ecosystem", ecosystem),
+        "from_version": base.get("from_version", from_version),
+        "to_version": base.get("to_version", to_version),
+        "sources": list(base.get("sources") or []),
+        "notes": base.get("notes"),
+        "rules": merge_packet_rules(list(base.get("rules") or []), llm_rules),
+    }
+    if data.get("notes"):
+        note = str(data["notes"])
+        prev = str(probe.get("notes") or "")
+        probe["notes"] = f"{prev}\n{note}".strip() if prev else note
+    for src in data.get("sources") or []:
+        if isinstance(src, dict) and src.get("url"):
+            probe.setdefault("sources", []).append(
+                {"url": str(src["url"]), "kind": str(src.get("kind") or "docs")}
+            )
+    for doc in docs:
+        kind = "docs" if doc.kind in {"seed", "link"} else "other"
+        probe.setdefault("sources", []).append({"url": doc.url, "kind": kind})
+
+    errs = validate_packet(probe)
+    if errs:
+        warnings.append(f"LLM packet failed validation: {errs[:3]}")
+        return base, warnings
+
+    warnings.append(
+        f"LLM packet enrichment added rules from {len(docs)} evidence page(s)"
+    )
+    return probe, warnings
 
 
 def load_fixture_openai_packet() -> dict[str, Any]:
@@ -369,6 +593,24 @@ def ensure_packet(
     if used_fixture:
         warnings.append(
             "using offline openai fixture packet because signal synthesis produced no rules"
+        )
+
+    # Evidence + LLM enrichment (live only; demo keeps fixtures / signal rules)
+    if not use_fixture_fallback:
+        packet, enrich_warnings = synthesize_from_evidence(
+            package=package,
+            from_version=str(packet.get("from_version") or from_v),
+            to_version=str(packet.get("to_version") or to_v),
+            ecosystem=str(packet.get("ecosystem") or eco),
+            signals=signals,
+            base=packet,
+        )
+        warnings.extend(enrich_warnings)
+        _apply_versions(
+            packet,
+            package=package,
+            from_version=str(packet.get("from_version") or from_v),
+            to_version=str(packet.get("to_version") or to_v),
         )
 
     save_packet(cache_path(root, package, packet["from_version"], packet["to_version"]), packet)

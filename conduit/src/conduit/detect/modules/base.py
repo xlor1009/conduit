@@ -17,6 +17,7 @@ class DetectContext:
     repo_root: Path
     installed: dict[str, str] = field(default_factory=dict)  # package -> version
     demo: bool = False  # use offline fixtures; live sources otherwise
+    verbose: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -31,6 +32,18 @@ class DetectModule(ABC):
             return True
         wanted = {p.lower() for p in self.packages}
         return any(name.lower() in wanted for name in installed)
+
+    def evidence_seeds(self) -> list[str]:
+        """Canonical doc URLs for LLM packet synthesis (override per vendor)."""
+        return []
+
+    def evidence_hosts(self) -> list[str]:
+        """Host allowlist for fetch/search evidence (override per vendor)."""
+        return []
+
+    def evidence_queries(self, *, from_version: str, to_version: str) -> list[str]:
+        """Web search queries for LLM evidence (override per vendor)."""
+        return []
 
     @abstractmethod
     def run(self, ctx: DetectContext) -> list[ChangeSignal]:

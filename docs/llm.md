@@ -82,9 +82,28 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | Feature | Behavior |
 |---------|----------|
 | Packet apply | Works fully |
-| Packet synthesize | Returns seed packet / sources only (no LLM rule generation) |
+| Packet synthesize / evidence enrichment | Skipped; scrape/signal rules only |
 | Self-correct | Heuristic string replacements from packet rules |
 | Test generation | Writes a minimal deterministic smoke stub |
+
+## Evidence-grounded packet enrichment
+
+When an LLM is configured and you are **not** in `--demo`, `ensure_packet` (used by `conduit run`) builds an **evidence pack** then asks the model for additional packet `rules`:
+
+1. Module **seed URLs** (e.g. OpenAI deprecations + migration guide)
+2. Same-host link expansion (host allowlist)
+3. Web search via `ddgs` (bundled with the `llm` extra)
+4. LLM emits rules JSON only — no free-form file rewrites
+5. Merge onto scrape/detect rules (model string replaces from scrape win on duplicate `match`)
+
+Conduit does **not** invent path successors or SDK call shapes. If evidence does not state a replacement, the gap stays in packet `notes` / self-correct.
+
+Use `--refresh-packet` after detect or prompt changes so a cached packet is rebuilt.
+
+```bash
+pip install -e "./conduit[llm]"   # includes ddgs for web search
+conduit run --path . --packet openai --refresh-packet -v
+```
 
 ## Note on the OpenAI *detect module*
 

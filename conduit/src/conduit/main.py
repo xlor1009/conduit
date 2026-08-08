@@ -145,6 +145,7 @@ def detect_cmd(
         skip_modules=skip_modules,
         skip_lockfile=skip_lockfile,
         demo=demo,
+        verbose=_VERBOSE,
     )
     if json_out:
         console.print_json(json.dumps([s.to_dict() for s in result.signals]))
@@ -279,6 +280,7 @@ def run_cmd(
         skip_modules=skip_modules,
         skip_lockfile=skip_lockfile,
         demo=demo,
+        verbose=_VERBOSE,
     )
     for warning in detected.warnings:
         console.print(f"[yellow]Warning:[/yellow] {warning}")
