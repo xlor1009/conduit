@@ -17,7 +17,7 @@ class OpenAIModule(DetectModule):
         for worker_cls in ALL_WORKERS:
             worker = worker_cls()
             try:
-                raw_list = worker.run()
+                raw_list = worker.run(demo=ctx.demo)
             except Exception:
                 continue
             for raw in raw_list:

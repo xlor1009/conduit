@@ -46,6 +46,9 @@ With `--verbose` / `-v`, each attempt also prints:
 - Which context files were sent to the repair step
 - Strategy used (`llm` or `heuristic`)
 - Files updated and, for heuristics, each `old -> new` replacement
+- When heuristics find nothing left to replace, why (already migrated / no matching rules)
+
+If an attempt produces **no file edits**, Conduit stops early instead of repeating empty retries. Configure an LLM for deeper repairs, or fix remaining failures manually.
 
 ```bash
 conduit run -v --path . --packet openai --skip-pr

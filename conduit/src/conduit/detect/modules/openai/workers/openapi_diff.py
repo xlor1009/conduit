@@ -12,7 +12,7 @@ from typing import Any
 import yaml
 
 from conduit.detect.modules.openai.models_legacy import ChangeType, RawSignal, Severity
-from conduit.detect.modules.openai.workers.base import Worker, env_flag, fixtures_dir
+from conduit.detect.modules.openai.workers.base import Worker, fixtures_dir
 
 
 def _load_openapi(path: Path) -> dict[str, Any]:
@@ -135,23 +135,22 @@ def _run_oasdiff(prev: Path, latest: Path) -> list[RawSignal]:
 class OpenAPIDiffWorker(Worker):
     name = "OpenAPIDiffWorker"
 
-    def run(self) -> list[RawSignal]:
+    def run(self, *, demo: bool = False) -> list[RawSignal]:
         fixture_prev = fixtures_dir() / "openapi" / "previous.yaml"
         fixture_latest = fixtures_dir() / "openapi" / "latest.yaml"
 
-        if env_flag("OASDIFF_LIVE"):
+        if not demo:
             live_signals = self._live_diff()
             if live_signals:
                 return live_signals
+            return []
 
         previous = _load_openapi(fixture_prev)
         latest = _load_openapi(fixture_latest)
         signals = _diff_paths(previous, latest)
 
-        # Prefer oasdiff output when available even on fixtures
         oas = _run_oasdiff(fixture_prev, fixture_latest)
         if oas:
-            # Keep fixture-derived param renames; append oasdiff extras
             keys = {(s.change_type, s.affected_pattern) for s in signals}
             for s in oas:
                 if (s.change_type, s.affected_pattern) not in keys:
@@ -173,30 +172,32 @@ class OpenAPIDiffWorker(Worker):
             except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
                 return []
             repo_path = tmp_path / "repo"
-            # Find openapi.yaml / openapi.json
             candidates = list(repo_path.glob("**/openapi.y*ml")) + list(
                 repo_path.glob("**/openapi.json")
             )
             if not candidates:
                 return []
-            # Use HEAD vs previous commit of same file as a simple live signal
             latest = candidates[0]
+            rel = latest.relative_to(repo_path).as_posix()
+            prev_tmp = tmp_path / "previous-openapi"
             try:
-                subprocess.run(
-                    ["git", "show", f"HEAD~1:{latest.relative_to(repo_path).as_posix()}"],
+                shown = subprocess.run(
+                    ["git", "show", f"HEAD~1:{rel}"],
                     cwd=repo_path,
                     check=True,
                     capture_output=True,
                     text=True,
                     timeout=30,
                 )
+                prev_tmp.write_text(shown.stdout, encoding="utf-8")
             except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                return _diff_paths(
-                    _load_openapi(fixtures_dir() / "openapi" / "previous.yaml"),
-                    _load_openapi(latest),
-                )
-            # Fall back to fixture previous vs live latest content
-            return _diff_paths(
-                _load_openapi(fixtures_dir() / "openapi" / "previous.yaml"),
-                _load_openapi(latest),
-            )
+                return []
+
+            signals = _diff_paths(_load_openapi(prev_tmp), _load_openapi(latest))
+            oas = _run_oasdiff(prev_tmp, latest)
+            if oas:
+                keys = {(s.change_type, s.affected_pattern) for s in signals}
+                for s in oas:
+                    if (s.change_type, s.affected_pattern) not in keys:
+                        signals.append(s)
+            return signals

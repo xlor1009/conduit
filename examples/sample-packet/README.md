@@ -3,5 +3,5 @@
 Example vendor-authored packet. Consumers:
 
 ```bash
-conduit run --path ./examples/demo-consumer --packet ./examples/sample-packet/conduit-packet.json --skip-pr
+conduit run --path ./examples/demo-consumer --packet ./examples/sample-packet/conduit-packet.json --demo --skip-pr
 ```

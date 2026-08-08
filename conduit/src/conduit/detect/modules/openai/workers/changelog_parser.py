@@ -6,9 +6,12 @@ import re
 from typing import Any
 
 import feedparser
+import httpx
 
 from conduit.detect.modules.openai.models_legacy import ChangeType, RawSignal, Severity
-from conduit.detect.modules.openai.workers.base import Worker, env_flag, fixtures_dir
+from conduit.detect.modules.openai.workers.base import Worker, fixtures_dir
+
+CHANGELOG_URL = "https://platform.openai.com/docs/changelog"
 
 RENAME_RE = re.compile(
     r"(?P<old>\b[a-z_][a-z0-9_]*)\s*(?:has been\s+)?renamed to\s+"
@@ -126,23 +129,33 @@ def _llm_extract(text: str) -> list[RawSignal]:
 class ChangelogParserWorker(Worker):
     name = "ChangelogParserWorker"
 
-    def run(self) -> list[RawSignal]:
-        feed_path = fixtures_dir() / "changelogs" / "openai_changelog.rss"
-        parsed = feedparser.parse(feed_path.read_text(encoding="utf-8"))
+    def run(self, *, demo: bool = False) -> list[RawSignal]:
         signals: list[RawSignal] = []
         blobs: list[str] = []
 
-        for entry in parsed.entries:
-            title = getattr(entry, "title", "") or ""
-            summary = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
-            link = getattr(entry, "link", None)
-            blob = f"{title}\n{summary}"
-            blobs.append(blob)
-            signals.extend(parse_changelog_text(blob, link))
+        if demo:
+            feed_path = fixtures_dir() / "changelogs" / "openai_changelog.rss"
+            parsed = feedparser.parse(feed_path.read_text(encoding="utf-8"))
+            for entry in parsed.entries:
+                title = getattr(entry, "title", "") or ""
+                summary = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
+                link = getattr(entry, "link", None)
+                blob = f"{title}\n{summary}"
+                blobs.append(blob)
+                signals.extend(parse_changelog_text(blob, link))
+        else:
+            try:
+                resp = httpx.get(CHANGELOG_URL, timeout=30.0, follow_redirects=True)
+                resp.raise_for_status()
+                blob = resp.text
+                blobs.append(blob)
+                signals.extend(parse_changelog_text(blob, CHANGELOG_URL))
+            except httpx.HTTPError:
+                return []
 
         from conduit.llm import get_llm_client
 
-        if env_flag("CHANGELOG_LLM") or get_llm_client() is not None:
+        if get_llm_client() is not None and blobs:
             llm_signals = _llm_extract("\n\n".join(blobs))
             seen = {(s.change_type, s.affected_pattern, s.replacement_pattern) for s in signals}
             for s in llm_signals:

@@ -16,7 +16,7 @@ class DetectContext:
 
     repo_root: Path
     installed: dict[str, str] = field(default_factory=dict)  # package -> version
-    fixture_mode: bool = True
+    demo: bool = False  # use offline fixtures; live sources otherwise
     extra: dict[str, Any] = field(default_factory=dict)
 
 

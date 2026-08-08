@@ -98,9 +98,19 @@ def _heuristic_fix(root: Path, packet: dict[str, Any]) -> FixAttempt:
     replacements: list[tuple[str, str]] = []
     for rule in packet.get("rules") or []:
         if rule.get("type") == "EXACT_STRING_REPLACE":
-            replacements.append((rule["match"], rule["replace"]))
+            replacements.append((str(rule["match"]), str(rule["replace"])))
         if rule.get("type") == "AST_PARAM_RENAME":
-            replacements.append((rule["old_param"], rule["new_param"]))
+            replacements.append((str(rule["old_param"]), str(rule["new_param"])))
+
+    # De-dupe while preserving order
+    seen: set[tuple[str, str]] = set()
+    uniq: list[tuple[str, str]] = []
+    for pair in replacements:
+        if pair in seen or not pair[0] or pair[0] == pair[1]:
+            continue
+        seen.add(pair)
+        uniq.append(pair)
+    replacements = uniq
 
     targets: list[Path] = []
     if (root / "tests").is_dir():
@@ -111,6 +121,8 @@ def _heuristic_fix(root: Path, packet: dict[str, Any]) -> FixAttempt:
 
     changed: list[str] = []
     details: list[str] = []
+    match_counts = {old: 0 for old, _ in replacements}
+
     for path in targets:
         try:
             original = path.read_text(encoding="utf-8")
@@ -119,8 +131,9 @@ def _heuristic_fix(root: Path, packet: dict[str, Any]) -> FixAttempt:
         updated = original
         file_hits: list[str] = []
         for old, new in replacements:
-            if old and old in updated and old != new:
+            if old in updated:
                 count = updated.count(old)
+                match_counts[old] = match_counts.get(old, 0) + count
                 updated = updated.replace(old, new)
                 file_hits.append(f"{old!r} -> {new!r} ({count}x)")
         if updated != original:
@@ -129,6 +142,20 @@ def _heuristic_fix(root: Path, packet: dict[str, Any]) -> FixAttempt:
             changed.append(rel)
             for hit in file_hits:
                 details.append(f"{rel}: {hit}")
+
+    if not changed:
+        if not replacements:
+            details.append(
+                "no EXACT_STRING_REPLACE / AST_PARAM_RENAME rules available for heuristics"
+            )
+        else:
+            for old, new in replacements:
+                if match_counts.get(old, 0) == 0:
+                    details.append(
+                        f"no remaining occurrences of {old!r} "
+                        f"(already migrated to {new!r}, or never present)"
+                    )
+
     return FixAttempt(strategy="heuristic", files=changed, details=details)
 
 
@@ -219,10 +246,17 @@ def verify_with_self_correct(
             for detail in fix.details:
                 vlog(f"[self-correct]   {detail}")
         else:
-            vlog(
+            emit(
                 f"[self-correct] strategy={fix.strategy}; "
                 "no file changes produced this attempt"
             )
+            for detail in fix.details:
+                vlog(f"[self-correct]   {detail}")
+            emit(
+                "[self-correct] stopping early: automatic repair made no edits "
+                "(configure an LLM for deeper fixes, or resolve remaining failures manually)"
+            )
+            break
 
         result = run_tests(root)
         if result.passed:

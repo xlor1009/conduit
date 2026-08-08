@@ -30,7 +30,7 @@ def run_detect(
     module_names: list[str] | None = None,
     skip_modules: bool = False,
     skip_lockfile: bool = False,
-    fixture_mode: bool = True,
+    demo: bool = False,
 ) -> DetectResult:
     root = root.resolve()
     installed = read_installed(root)
@@ -47,7 +47,7 @@ def run_detect(
         ctx = DetectContext(
             repo_root=root,
             installed=installed,
-            fixture_mode=fixture_mode,
+            demo=demo,
         )
         for mod in load_modules(names=module_names):
             if (

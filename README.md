@@ -36,6 +36,7 @@ python -m pip install -e "./conduit[llm,langs,dev]"
 conduit run \
   --path ./examples/demo-consumer \
   --packet ./examples/sample-packet/conduit-packet.json \
+  --demo \
   --skip-pr
 ```
 

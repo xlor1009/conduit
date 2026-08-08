@@ -27,5 +27,5 @@ jobs:
         run: |
           conduit run --path . --skip-lockfile --module openai --no-push || true
           # Prefer consumer repos to point this workflow at their app path.
-          # In this monorepo, run against the demo:
-          conduit run --path ./examples/demo-consumer --packet ./examples/sample-packet/conduit-packet.json --skip-pr
+          # In this monorepo, run against the demo with offline fixtures:
+          conduit run --path ./examples/demo-consumer --packet ./examples/sample-packet/conduit-packet.json --demo --skip-pr

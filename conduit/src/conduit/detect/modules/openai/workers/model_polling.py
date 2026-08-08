@@ -15,13 +15,6 @@ from conduit.detect.modules.openai.workers.base import Worker, data_dir, fixture
 
 MODELS_URL = "https://api.openai.com/v1/models"
 
-# Known replacements when a snapshot model vanishes
-KNOWN_REPLACEMENTS = {
-    "gpt-4-0613": "gpt-4o",
-    "gpt-3.5-turbo-0301": "gpt-4o-mini",
-    "text-davinci-003": "gpt-3.5-turbo-instruct",
-}
-
 
 def _model_ids(payload: dict[str, Any]) -> set[str]:
     return {item["id"] for item in payload.get("data", []) if "id" in item}
@@ -47,50 +40,57 @@ def _fetch_live_models(api_key: str) -> dict[str, Any] | None:
 class ModelPollingWorker(Worker):
     name = "ModelPollingWorker"
 
-    def run(self) -> list[RawSignal]:
+    def run(self, *, demo: bool = False) -> list[RawSignal]:
         snapshot_path = data_dir() / ".models-snapshot.json"
         fixture_current = fixtures_dir() / "models" / "current_models.json"
 
         previous = _load_json(snapshot_path) if snapshot_path.is_file() else {"data": []}
 
-        api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-        current: dict[str, Any] | None = None
-        if api_key:
-            current = _fetch_live_models(api_key)
-        if current is None:
+        if demo:
             current = _load_json(fixture_current)
+        else:
+            api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+            if not api_key:
+                return []
+            current = _fetch_live_models(api_key)
+            if current is None:
+                return []
 
         prev_ids = _model_ids(previous)
         curr_ids = _model_ids(current)
-        removed = sorted(prev_ids - curr_ids)
+        # First live capture: seed snapshot without emitting removals against empty prev
+        if not prev_ids and not demo:
+            removed: list[str] = []
+        else:
+            removed = sorted(prev_ids - curr_ids)
 
         signals: list[RawSignal] = []
         for model_id in removed:
-            replacement = KNOWN_REPLACEMENTS.get(model_id)
             signals.append(
                 RawSignal(
                     vendor="openai",
                     change_type=ChangeType.MODEL_REMOVED,
                     severity=Severity.CRITICAL,
                     affected_pattern=model_id,
-                    replacement_pattern=replacement,
+                    replacement_pattern=None,
                     source_url=MODELS_URL,
                     description=(
                         f"Model {model_id} disappeared from /v1/models "
-                        f"(replacement hint: {replacement or 'unknown'})"
+                        "(replacement from deprecation docs when available)"
                     ),
                 )
             )
 
-        # Persist updated snapshot for next run (fixture or live)
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         out = {
             "object": "list",
             "captured_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "data": current.get("data", []),
         }
-        # Do not overwrite the committed baseline during unit tests unless asked
-        if os.environ.get("UPDATE_MODEL_SNAPSHOT", "").strip() in {"1", "true", "yes"}:
+        if demo:
+            if os.environ.get("UPDATE_MODEL_SNAPSHOT", "").strip() in {"1", "true", "yes"}:
+                snapshot_path.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+        else:
             snapshot_path.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
 
         return signals

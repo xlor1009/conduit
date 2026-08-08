@@ -127,6 +127,11 @@ def detect_cmd(
     skip_modules: bool = typer.Option(False, "--skip-modules"),
     skip_lockfile: bool = typer.Option(False, "--skip-lockfile"),
     majors_only: bool = typer.Option(True, "--majors-only/--all-bumps"),
+    demo: bool = typer.Option(
+        False,
+        "--demo",
+        help="Use offline detect fixtures (default: live vendor sources)",
+    ),
     json_out: bool = typer.Option(False, "--json"),
 ) -> None:
     """Run lockfile diff + vendor detect modules."""
@@ -139,7 +144,7 @@ def detect_cmd(
         module_names=names,
         skip_modules=skip_modules,
         skip_lockfile=skip_lockfile,
-        fixture_mode=True,
+        demo=demo,
     )
     if json_out:
         console.print_json(json.dumps([s.to_dict() for s in result.signals]))
@@ -236,6 +241,11 @@ def run_cmd(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Print extra diagnostics"
     ),
+    demo: bool = typer.Option(
+        False,
+        "--demo",
+        help="Use offline detect fixtures + openai demo packet fallback (default: live)",
+    ),
 ) -> None:
     """Full pipeline: detect → prune → packet → apply → verify → PR."""
     global _VERBOSE
@@ -252,13 +262,15 @@ def run_cmd(
         )
 
     names = [module] if module else _detect_module_names_for_package(pkg_hint)
+    if demo:
+        console.print("[dim]Demo mode: using offline detect fixtures[/dim]")
     detected = run_detect(
         root,
         base_ref=base_ref,
         module_names=names,
         skip_modules=skip_modules,
         skip_lockfile=skip_lockfile,
-        fixture_mode=True,
+        demo=demo,
     )
     pkg = _pick_package(detected.signals, pkg_hint)
 
@@ -280,7 +292,7 @@ def run_cmd(
             package=pkg,
             packet_path=packet_file,
             installed=detected.installed,
-            use_fixture_fallback=True,
+            use_fixture_fallback=demo,
         )
     else:
         if pkg is None:
@@ -295,7 +307,7 @@ def run_cmd(
             package=pkg,
             packet_path=None,
             installed=detected.installed,
-            use_fixture_fallback=True,
+            use_fixture_fallback=demo,
         )
 
     pkt = ensured.packet

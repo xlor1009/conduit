@@ -12,5 +12,6 @@ pip install -e "./conduit[langs,dev]"
 
 conduit run --path ./examples/demo-consumer \
   --packet ./examples/sample-packet/conduit-packet.json \
+  --demo \
   --skip-pr
 ```

@@ -50,6 +50,7 @@ The repo ships a tiny consumer app that still uses legacy OpenAI patterns, plus 
 conduit run \
   --path ./examples/demo-consumer \
   --packet ./examples/sample-packet/conduit-packet.json \
+  --demo \
   --skip-pr
 ```
 
@@ -61,6 +62,7 @@ What you should see:
 4. Demo tests run under pytest
 5. PR creation is skipped so you can inspect the working tree
 
+`--demo` forces offline detect fixtures (and the openai demo packet fallback). Without it, detect workers hit live vendor sources.
 ```bash
 git -C examples/demo-consumer diff
 # or restore:
@@ -107,6 +109,7 @@ Useful flags:
 | Flag | Meaning |
 |------|---------|
 | `--packet <name\|file>` | Package name **or** path to `conduit-packet.json` |
+| `--demo` | Offline fixtures / openai demo packet fallback (default: live detect) |
 | `-v` / `--verbose` | Show version sources, export-delta diagnostics, self-correct failure/fix details |
 | `--skip-pr` | Do not open a PR |
 | `--no-push` | Commit locally but do not push |

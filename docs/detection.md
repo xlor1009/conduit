@@ -43,6 +43,7 @@ Modules implement `DetectModule` and emit `ChangeSignal`s (renames, deprecations
 
 ```bash
 conduit detect --path . --module openai
+conduit detect --path . --module openai --demo            # offline fixtures
 conduit detect --path . --skip-lockfile --module openai   # modules only
 conduit detect --path . --skip-modules                    # lockfile only
 conduit detect --path . --json                           # machine-readable

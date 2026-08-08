@@ -33,6 +33,7 @@ Full pipeline: detect → prune → export delta → packet → apply → test g
 | `--package` | auto | Package to migrate |
 | `--module` | auto | Restrict detect modules (if omitted and a package name is known, Conduit uses a matching detect module when one exists) |
 | `--packet` | cache/synth | Path to an existing `conduit-packet.json`, **or** a package name (e.g. `openai`, `stripe`) |
+| `--demo` | false | Offline detect fixtures + openai demo packet fallback (default is **live** vendor sources) |
 | `--skip-tests` | false | Skip test gen + verify |
 | `--skip-pr` | false | Do not open a PR |
 | `--no-push` | false | Do not push remote |
@@ -67,6 +68,7 @@ Lockfile diff + vendor modules → print signals (or `--json`).
 | `--skip-modules` | false | |
 | `--skip-lockfile` | false | |
 | `--majors-only` / `--all-bumps` | majors-only | Filter version jumps |
+| `--demo` | false | Offline detect fixtures (default: live) |
 | `--json` | false | Machine-readable signals |
 
 Exit `0` if any signals, else `1`.

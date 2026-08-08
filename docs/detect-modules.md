@@ -16,7 +16,7 @@ class DetectModule(ABC):
         ...
 ```
 
-`DetectContext` includes `repo_root`, `installed` versions, and `fixture_mode`.
+`DetectContext` includes `repo_root`, `installed` versions, and `demo` (offline fixtures vs live sources).
 
 Built-ins register via entry point group:
 
@@ -29,17 +29,24 @@ Discovery: [`conduit/src/conduit/detect/modules/discovery.py`](../conduit/src/co
 
 ## Built-in: OpenAI
 
-`OpenAIModule` runs several workers (fixtures by default for demos/CI):
+`OpenAIModule` runs several workers. **Live by default** (network). Pass `--demo` for offline fixtures (CI / sample packet demos).
 
-| Worker | Signal source |
-|--------|----------------|
-| OpenAPI diff | Spec deltas → param renames |
-| Deprecation scraper | Deprecation docs HTML |
-| Model polling | Model id removals |
-| Changelog parser | RSS / text (optional LLM extract) |
-| SDK release | GitHub release tags |
+| Worker | Live source | Demo fixture |
+|--------|-------------|--------------|
+| OpenAPI diff | `openai/openai-openapi` git clone | `fixtures/openai/openapi/` |
+| Deprecation scraper | `https://platform.openai.com/docs/deprecations` | `fixtures/openai/deprecations/` |
+| Model polling | `GET /v1/models` (needs `OPENAI_API_KEY`) | `fixtures/openai/models/` |
+| Changelog parser | platform changelog page | `fixtures/openai/changelogs/` |
+| SDK release | GitHub releases API | `fixtures/openai/sdk_releases/` (also lists repos to watch) |
 
-Live network mode is gated by worker env flags / keys; default fixture paths live under [`conduit/fixtures/openai/`](../conduit/fixtures/openai/).
+Fixtures and the SDK repo list are **info-point / offline** data. Model replacement strings should come from live deprecation pages, not hardcoded module maps.
+
+```bash
+conduit detect --path . --module openai          # live
+conduit detect --path . --module openai --demo   # fixtures
+conduit run --path . --packet openai -v          # live detect
+conduit run --path ./examples/demo-consumer --packet ./examples/sample-packet/conduit-packet.json --demo --skip-pr
+```
 
 Normalize step turns raw events into `ChangeSignal` + `suggested_rules` that packet synthesis can fold in.
 

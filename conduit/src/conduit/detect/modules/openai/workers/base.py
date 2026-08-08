@@ -44,5 +44,6 @@ class Worker(ABC):
     name: str = "worker"
 
     @abstractmethod
-    def run(self) -> list[RawSignal]:
+    def run(self, *, demo: bool = False) -> list[RawSignal]:
+        """Emit signals. Live sources by default; fixtures only when demo=True."""
         raise NotImplementedError

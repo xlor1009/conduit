@@ -39,7 +39,7 @@ Resolution order in `conduit run`:
 2. **`--packet` package name** — e.g. `--packet openai` (same idea as `--package openai`): synthesize/cache for that package
 3. **Cache** — `.conduit/packets/{package}-{from}-{to}.json`
 4. **Synthesize from detect signals** — fold `suggested_rules` into a packet
-5. **OpenAI fixture fallback** — demo packet when package is `openai` and rules are still empty (warns)
+5. **OpenAI fixture fallback** — only when `--demo` is set and package is `openai` with empty rules (warns)
 
 Cached after synthesis so the next run is instant. Explicit packet **files** are never overwritten by version rewriting.
 
