@@ -310,3 +310,74 @@ def test_attr_rename_rule_in_packet(tmp_path: Path):
     text = src.read_text(encoding="utf-8")
     assert "chat.completions" in text
     assert report.files_modified
+
+def test_self_correct_verbose_logs_failure_and_fix(tmp_path: Path, monkeypatch):
+    from conduit.self_correct import verify_with_self_correct
+    from conduit.test_runner import TestResult
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "app.py").write_text("max_tokens = 1\n", encoding="utf-8")
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_app.py").write_text("def test_ok():\n    assert False\n", encoding="utf-8")
+
+    packet = {
+        "packet_id": "t",
+        "package": "openai",
+        "ecosystem": "pypi",
+        "from_version": "0",
+        "to_version": "1",
+        "rules": [
+            {
+                "type": "EXACT_STRING_REPLACE",
+                "match": "max_tokens",
+                "replace": "max_completion_tokens",
+                "target_files": ["*.py"],
+            }
+        ],
+    }
+
+    calls = {"n": 0}
+
+    def fake_run_tests(root):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return TestResult(
+                runner="pytest",
+                passed=False,
+                returncode=1,
+                stdout="FAILED tests/test_app.py::test_ok - assert False",
+                stderr="",
+                command=["pytest", "-q"],
+            )
+        return TestResult(
+            runner="pytest",
+            passed=True,
+            returncode=0,
+            stdout="",
+            stderr="",
+            command=["pytest", "-q"],
+        )
+
+    monkeypatch.setattr("conduit.self_correct.run_tests", fake_run_tests)
+    monkeypatch.setattr("conduit.self_correct.get_llm_client", lambda: None)
+
+    logs: list[str] = []
+    result, corrected = verify_with_self_correct(
+        tmp_path,
+        packet,
+        max_retries=2,
+        verbose=True,
+        log=logs.append,
+    )
+    assert result.passed
+    assert any("src" in c.replace("\\\\", "/") for c in corrected) or any(
+        "app.py" in c for c in corrected
+    )
+    joined = "\n".join(logs)
+    assert "failure summary" in joined
+    assert "assert False" in joined
+    assert "strategy=heuristic" in joined
+    assert "max_tokens" in joined
+    assert "max_completion_tokens" in joined

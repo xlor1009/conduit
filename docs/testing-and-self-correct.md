@@ -40,11 +40,23 @@ Generated paths are included in the patch report / PR body.
 3. Re-run tests  
 4. If still failing after retries → `conduit run` aborts PR creation (exit code 2)
 
+With `--verbose` / `-v`, each attempt also prints:
+
+- A truncated failure excerpt (stdout/stderr)
+- Which context files were sent to the repair step
+- Strategy used (`llm` or `heuristic`)
+- Files updated and, for heuristics, each `old -> new` replacement
+
+```bash
+conduit run -v --path . --packet openai --skip-pr
+```
+
 ## Commands
 
 ```bash
 conduit verify --path . --packet ./conduit-packet.json --max-retries 5
 conduit run ... --max-retries 3
+conduit run -v ... --max-retries 3   # show failure + fix details per attempt
 conduit run ... --skip-tests    # apply only; not recommended for real migrations
 ```
 

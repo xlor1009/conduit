@@ -3,11 +3,37 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from conduit.llm import get_llm_client
 from conduit.test_runner import TestResult, run_tests
+
+LogFn = Callable[[str], None]
+
+
+def _noop_log(_: str) -> None:
+    return None
+
+
+@dataclass
+class FixAttempt:
+    strategy: str  # llm | heuristic | none
+    files: list[str] = field(default_factory=list)
+    details: list[str] = field(default_factory=list)
+
+
+def _failure_excerpt(test_result: TestResult, *, limit: int = 1500) -> str:
+    parts = []
+    if test_result.stdout and test_result.stdout.strip():
+        parts.append(test_result.stdout.strip())
+    if test_result.stderr and test_result.stderr.strip():
+        parts.append(test_result.stderr.strip())
+    text = "\n".join(parts).strip() or "(no stdout/stderr captured)"
+    if len(text) > limit:
+        return "…\n" + text[-limit:]
+    return text
 
 
 def _paths_from_traceback(root: Path, text: str, limit: int = 12) -> list[Path]:
@@ -68,8 +94,7 @@ def _apply_file_updates(root: Path, updates: dict[str, str]) -> list[str]:
     return changed
 
 
-def _heuristic_fix(root: Path, packet: dict[str, Any]) -> list[str]:
-    changed: list[str] = []
+def _heuristic_fix(root: Path, packet: dict[str, Any]) -> FixAttempt:
     replacements: list[tuple[str, str]] = []
     for rule in packet.get("rules") or []:
         if rule.get("type") == "EXACT_STRING_REPLACE":
@@ -84,19 +109,27 @@ def _heuristic_fix(root: Path, packet: dict[str, Any]) -> list[str]:
     if (root / "src").is_dir():
         targets += list((root / "src").rglob("*.py"))
 
+    changed: list[str] = []
+    details: list[str] = []
     for path in targets:
         try:
             original = path.read_text(encoding="utf-8")
         except OSError:
             continue
         updated = original
+        file_hits: list[str] = []
         for old, new in replacements:
-            if old and old in updated:
+            if old and old in updated and old != new:
+                count = updated.count(old)
                 updated = updated.replace(old, new)
+                file_hits.append(f"{old!r} -> {new!r} ({count}x)")
         if updated != original:
             path.write_text(updated, encoding="utf-8")
-            changed.append(str(path.relative_to(root)))
-    return changed
+            rel = str(path.relative_to(root))
+            changed.append(rel)
+            for hit in file_hits:
+                details.append(f"{rel}: {hit}")
+    return FixAttempt(strategy="heuristic", files=changed, details=details)
 
 
 def _llm_suggest_fixes(
@@ -137,26 +170,64 @@ def verify_with_self_correct(
     packet: dict[str, Any],
     *,
     max_retries: int = 5,
+    verbose: bool = False,
+    log: LogFn | None = None,
 ) -> tuple[TestResult, list[str]]:
     """Run tests; on failure, LLM/heuristic-fix and retry (default 5)."""
+    emit: LogFn = log or print
+    vlog: LogFn = emit if verbose else _noop_log
+
     corrected_files: list[str] = []
     result = run_tests(root)
     if result.passed:
         return result, corrected_files
 
     for attempt in range(1, max_retries + 1):
-        print(f"[self-correct] attempt {attempt}/{max_retries} after test failure")
+        emit(f"[self-correct] attempt {attempt}/{max_retries} after test failure")
+        vlog(f"[self-correct] failure summary:\n{_failure_excerpt(result)}")
+
         context_files = _collect_context_files(root, result)
+        vlog(
+            f"[self-correct] context files for repair: "
+            f"{', '.join(sorted(context_files)) or '(none)'}"
+        )
+
         updates = _llm_suggest_fixes(
             test_result=result, packet=packet, files=context_files
         )
         if updates:
-            corrected_files.extend(_apply_file_updates(root, updates))
+            changed = _apply_file_updates(root, updates)
+            fix = FixAttempt(
+                strategy="llm",
+                files=changed,
+                details=[f"{rel}: rewritten by LLM" for rel in changed],
+            )
         else:
-            corrected_files.extend(_heuristic_fix(root, packet))
+            client = get_llm_client()
+            if client is None:
+                vlog("[self-correct] no LLM configured; applying packet heuristic fixes")
+            else:
+                vlog("[self-correct] LLM returned no file updates; applying heuristic fixes")
+            fix = _heuristic_fix(root, packet)
+
+        corrected_files.extend(fix.files)
+        if fix.files:
+            vlog(
+                f"[self-correct] strategy={fix.strategy}; "
+                f"updated {len(fix.files)} file(s): {', '.join(fix.files)}"
+            )
+            for detail in fix.details:
+                vlog(f"[self-correct]   {detail}")
+        else:
+            vlog(
+                f"[self-correct] strategy={fix.strategy}; "
+                "no file changes produced this attempt"
+            )
 
         result = run_tests(root)
         if result.passed:
+            vlog(f"[self-correct] tests passed after attempt {attempt}")
             return result, sorted(set(corrected_files))
+        vlog(f"[self-correct] still failing after attempt {attempt}: {result.summary}")
 
     return result, sorted(set(corrected_files))

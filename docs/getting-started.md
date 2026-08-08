@@ -107,7 +107,7 @@ Useful flags:
 | Flag | Meaning |
 |------|---------|
 | `--packet <name\|file>` | Package name **or** path to `conduit-packet.json` |
-| `-v` / `--verbose` | Show version sources, export-delta diagnostics |
+| `-v` / `--verbose` | Show version sources, export-delta diagnostics, self-correct failure/fix details |
 | `--skip-pr` | Do not open a PR |
 | `--no-push` | Commit locally but do not push |
 | `--skip-tests` | Skip test gen + verify (not recommended) |

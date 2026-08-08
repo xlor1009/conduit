@@ -190,15 +190,23 @@ def verify_cmd(
     path: Path = typer.Option(Path("."), "--path"),
     packet: Optional[Path] = typer.Option(None, "--packet"),
     max_retries: int = typer.Option(5, "--max-retries"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Print self-correct failure/fix details"
+    ),
 ) -> None:
     """Run native tests with optional self-correction."""
+    global _VERBOSE
+    if verbose:
+        _VERBOSE = True
     root = _resolve_root(path)
     data = (
         json.loads(packet.read_text(encoding="utf-8"))
         if packet
         else load_fixture_openai_packet()
     )
-    result, corrected = verify_with_self_correct(root, data, max_retries=max_retries)
+    result, corrected = verify_with_self_correct(
+        root, data, max_retries=max_retries, verbose=_VERBOSE, log=console.print
+    )
     for rel in corrected:
         console.print(f"[self-correct] updated {rel}")
     console.print(result.summary)
@@ -355,7 +363,7 @@ def run_cmd(
                 report.files_modified.append(rel)
 
         test_result, corrected = verify_with_self_correct(
-            root, pkt, max_retries=max_retries
+            root, pkt, max_retries=max_retries, verbose=_VERBOSE, log=console.print
         )
         for rel in corrected:
             console.print(f"[self-correct] updated {rel}")

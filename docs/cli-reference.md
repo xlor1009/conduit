@@ -11,7 +11,7 @@ conduit <command> --help
 
 | Option | Description |
 |--------|-------------|
-| `--verbose` / `-v` | Extra diagnostics (packet version sources, export-delta resolve details, etc.) |
+| `--verbose` / `-v` | Extra diagnostics (packet version sources, export-delta resolve details, self-correct failure/fix details, etc.) |
 
 Place before or after the subcommand:
 
@@ -94,6 +94,7 @@ Run tests + self-correct using a packet for heuristic/LLM context.
 | `--path` | `.` | Repo root |
 | `--packet` | openai fixture if omitted | Packet **file** path |
 | `--max-retries` | `5` | |
+| `--verbose` / `-v` | false | Self-correct failure/fix details |
 
 ---
 
