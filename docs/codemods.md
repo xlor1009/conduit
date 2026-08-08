@@ -25,6 +25,8 @@ Globs match basename or repo-relative path (`fnmatch`).
 }
 ```
 
+Matches whole tokens only (boundaries treat `A–Z a–z 0–9 _ . -` as part of a token). That prevents `davinci` from rewriting `text_davinci_003` in a `def` name, and `gpt-4` from rewriting inside `gpt-4-0613` — which would otherwise inject `-` / `.` into identifiers and cause `SyntaxError`.
+
 ### `REGEX_REPLACE`
 
 ```json

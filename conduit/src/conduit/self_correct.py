@@ -95,6 +95,8 @@ def _apply_file_updates(root: Path, updates: dict[str, str]) -> list[str]:
 
 
 def _heuristic_fix(root: Path, packet: dict[str, Any]) -> FixAttempt:
+    from conduit.patcher.string_replace import exact_replace
+
     replacements: list[tuple[str, str]] = []
     for rule in packet.get("rules") or []:
         if rule.get("type") == "EXACT_STRING_REPLACE":
@@ -102,7 +104,7 @@ def _heuristic_fix(root: Path, packet: dict[str, Any]) -> FixAttempt:
         if rule.get("type") == "AST_PARAM_RENAME":
             replacements.append((str(rule["old_param"]), str(rule["new_param"])))
 
-    # De-dupe while preserving order
+    # De-dupe while preserving order; longer matches first (gpt-4-0613 before gpt-4)
     seen: set[tuple[str, str]] = set()
     uniq: list[tuple[str, str]] = []
     for pair in replacements:
@@ -110,7 +112,7 @@ def _heuristic_fix(root: Path, packet: dict[str, Any]) -> FixAttempt:
             continue
         seen.add(pair)
         uniq.append(pair)
-    replacements = uniq
+    replacements = sorted(uniq, key=lambda p: len(p[0]), reverse=True)
 
     targets: list[Path] = []
     if (root / "tests").is_dir():
@@ -131,10 +133,9 @@ def _heuristic_fix(root: Path, packet: dict[str, Any]) -> FixAttempt:
         updated = original
         file_hits: list[str] = []
         for old, new in replacements:
-            if old in updated:
-                count = updated.count(old)
+            updated, count = exact_replace(updated, old, new)
+            if count:
                 match_counts[old] = match_counts.get(old, 0) + count
-                updated = updated.replace(old, new)
                 file_hits.append(f"{old!r} -> {new!r} ({count}x)")
         if updated != original:
             path.write_text(updated, encoding="utf-8")

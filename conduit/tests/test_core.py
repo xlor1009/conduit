@@ -491,7 +491,32 @@ def test_ensure_packet_refresh_skips_cache(tmp_path: Path):
     assert any("refreshed packet cache" in w for w in refreshed.warnings)
 
 
-def test_parse_live_deprecation_tables():
+def test_exact_replace_skips_identifier_tokens():
+    from conduit.patcher.string_replace import exact_replace
+
+    src = "def test_uses_text_davinci_003():\n    m = 'text-davinci-003'\n"
+    # Short legacy id must not rewrite the function name
+    out, n = exact_replace(src, "davinci", "gpt-3.5-turbo")
+    assert n == 0
+    assert "def test_uses_text_davinci_003" in out
+    # Full model id in a string still replaces
+    out2, n2 = exact_replace(src, "text-davinci-003", "gpt-5.6-terra")
+    assert n2 == 1
+    assert "gpt-5.6-terra" in out2
+    assert "def test_uses_text_davinci_003" in out2
+
+
+def test_exact_replace_skips_model_id_prefixes():
+    from conduit.patcher.string_replace import exact_replace
+
+    src = 'model = "gpt-4-0613"\n'
+    out, n = exact_replace(src, "gpt-4", "gpt-5.6-sol")
+    assert n == 0
+    assert "gpt-4-0613" in out
+    out2, n2 = exact_replace(src, "gpt-4-0613", "gpt-5.6-sol")
+    assert n2 == 1
+    assert out2 == 'model = "gpt-5.6-sol"\n'
+
     from conduit.detect.modules.openai.workers.deprecation_scraper import parse_deprecation_html
 
     html = """
@@ -526,3 +551,28 @@ def test_openapi_load_sniffs_yaml_without_suffix(tmp_path: Path):
     path.write_text("openapi: 3.0.0\npaths: {}\n", encoding="utf-8")
     data = _load_openapi(path)
     assert data["openapi"] == "3.0.0"
+
+
+def test_exact_replace_skips_identifier_tokens():
+    from conduit.patcher.string_replace import exact_replace
+
+    src = "def test_uses_text_davinci_003():\n    m = 'text-davinci-003'\n"
+    out, n = exact_replace(src, "davinci", "gpt-3.5-turbo")
+    assert n == 0
+    assert "def test_uses_text_davinci_003" in out
+    out2, n2 = exact_replace(src, "text-davinci-003", "gpt-5.6-terra")
+    assert n2 == 1
+    assert "gpt-5.6-terra" in out2
+    assert "def test_uses_text_davinci_003" in out2
+
+
+def test_exact_replace_skips_model_id_prefixes():
+    from conduit.patcher.string_replace import exact_replace
+
+    src = 'model = "gpt-4-0613"\n'
+    out, n = exact_replace(src, "gpt-4", "gpt-5.6-sol")
+    assert n == 0
+    assert "gpt-4-0613" in out
+    out2, n2 = exact_replace(src, "gpt-4-0613", "gpt-5.6-sol")
+    assert n2 == 1
+    assert out2 == 'model = "gpt-5.6-sol"\n'
