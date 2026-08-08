@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from conduit.llm import get_llm_client
+from conduit.repair_ignore import IgnoreList, build_ignore_list
 from conduit.test_runner import TestResult, run_tests
 
 LogFn = Callable[[str], None]
@@ -94,9 +95,13 @@ def _apply_file_updates(root: Path, updates: dict[str, str]) -> list[str]:
     return changed
 
 
-def _heuristic_fix(root: Path, packet: dict[str, Any]) -> FixAttempt:
+def _heuristic_fix(
+    root: Path, packet: dict[str, Any], ignore: IgnoreList | None = None
+) -> FixAttempt:
     from conduit.patcher.string_replace import exact_replace
+    from conduit.repair_ignore import exact_replace_respecting_ignore
 
+    ignore = ignore or IgnoreList()
     replacements: list[tuple[str, str]] = []
     for rule in packet.get("rules") or []:
         if rule.get("type") == "EXACT_STRING_REPLACE":
@@ -124,8 +129,16 @@ def _heuristic_fix(root: Path, packet: dict[str, Any]) -> FixAttempt:
     changed: list[str] = []
     details: list[str] = []
     match_counts = {old: 0 for old, _ in replacements}
+    skipped_files = 0
 
     for path in targets:
+        try:
+            rel = str(path.relative_to(root)).replace("\\", "/")
+        except ValueError:
+            continue
+        if ignore.path_ignored(rel):
+            skipped_files += 1
+            continue
         try:
             original = path.read_text(encoding="utf-8")
         except OSError:
@@ -133,16 +146,23 @@ def _heuristic_fix(root: Path, packet: dict[str, Any]) -> FixAttempt:
         updated = original
         file_hits: list[str] = []
         for old, new in replacements:
-            updated, count = exact_replace(updated, old, new)
+            if ignore.patterns:
+                updated, count = exact_replace_respecting_ignore(
+                    updated, old, new, ignored_patterns=ignore.patterns
+                )
+            else:
+                updated, count = exact_replace(updated, old, new)
             if count:
                 match_counts[old] = match_counts.get(old, 0) + count
                 file_hits.append(f"{old!r} -> {new!r} ({count}x)")
         if updated != original:
             path.write_text(updated, encoding="utf-8")
-            rel = str(path.relative_to(root))
             changed.append(rel)
             for hit in file_hits:
                 details.append(f"{rel}: {hit}")
+
+    if skipped_files:
+        details.append(f"ignored {skipped_files} file(s) via ignore list")
 
     if not changed:
         if not replacements:
@@ -165,18 +185,26 @@ def _llm_suggest_fixes(
     test_result: TestResult,
     packet: dict[str, Any],
     files: dict[str, str],
+    ignore: IgnoreList | None = None,
 ) -> dict[str, str]:
     client = get_llm_client()
     if client is None:
         return {}
+
+    ignore = ignore or IgnoreList()
+    files = {k: v for k, v in files.items() if not ignore.path_ignored(k)}
 
     prompt = {
         "instructions": (
             "Tests failed after an automatic API migration. "
             "Fix production and/or test files to match the migration packet. "
             'Return JSON: {"files": {"relative/path.py": "full new file contents"}}. '
-            "Only include files that need changes."
+            "Only include files that need changes. "
+            "Do NOT modify ignored paths. "
+            "Do NOT rewrite ignored patterns when they appear as LEGACY_/FORBIDDEN_/"
+            "EXPECTED_/ALLOWED_ contract constants — those define the migration oracle."
         ),
+        "ignore": ignore.to_prompt_dict(),
         "error_stdout": test_result.stdout[-6000:],
         "error_stderr": test_result.stderr[-6000:],
         "packet": packet,
@@ -184,11 +212,12 @@ def _llm_suggest_fixes(
     }
     try:
         data = client.complete_json(
-            system="You are a careful migration agent. Reply with JSON only.",
+            system="You are a careful migration agent. Reply with JSON only. Honor ignore list.",
             user=json.dumps(prompt),
         )
         files_out = data.get("files") or {}
-        return {str(k): str(v) for k, v in files_out.items() if isinstance(v, str)}
+        updates = {str(k): str(v) for k, v in files_out.items() if isinstance(v, str)}
+        return {k: v for k, v in updates.items() if not ignore.path_ignored(k)}
     except Exception:
         return {}
 
@@ -210,18 +239,33 @@ def verify_with_self_correct(
     if result.passed:
         return result, corrected_files
 
+    ignore = build_ignore_list(root, packet)
+    if verbose and (ignore.paths or ignore.globs or ignore.patterns):
+        vlog(
+            "[self-correct] ignore list: "
+            f"paths={sorted(ignore.paths) or '[]'} "
+            f"globs={ignore.globs or []} "
+            f"patterns={len(ignore.patterns)}"
+        )
+
     for attempt in range(1, max_retries + 1):
         emit(f"[self-correct] attempt {attempt}/{max_retries} after test failure")
         vlog(f"[self-correct] failure summary:\n{_failure_excerpt(result)}")
 
         context_files = _collect_context_files(root, result)
+        context_files = {
+            k: v for k, v in context_files.items() if not ignore.path_ignored(k)
+        }
         vlog(
             f"[self-correct] context files for repair: "
             f"{', '.join(sorted(context_files)) or '(none)'}"
         )
 
         updates = _llm_suggest_fixes(
-            test_result=result, packet=packet, files=context_files
+            test_result=result,
+            packet=packet,
+            files=context_files,
+            ignore=ignore,
         )
         if updates:
             changed = _apply_file_updates(root, updates)
@@ -236,7 +280,7 @@ def verify_with_self_correct(
                 vlog("[self-correct] no LLM configured; applying packet heuristic fixes")
             else:
                 vlog("[self-correct] LLM returned no file updates; applying heuristic fixes")
-            fix = _heuristic_fix(root, packet)
+            fix = _heuristic_fix(root, packet, ignore=ignore)
 
         corrected_files.extend(fix.files)
         if fix.files:

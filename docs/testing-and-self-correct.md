@@ -35,10 +35,23 @@ Generated paths are included in the patch report / PR body.
 1. Run tests  
 2. On failure, up to `--max-retries` (default **5**):
    - Collect traceback file paths + nearby source/tests  
-   - If LLM configured → request `{"files": {relpath: new_contents}}` and write them  
-   - Else apply heuristic replaces derived from packet `EXACT_STRING_REPLACE` / `AST_PARAM_RENAME`  
+   - Build a **dynamic ignore list** (see below)  
+   - If LLM configured → request `{"files": {relpath: new_contents}}` and write them (ignored paths stripped)  
+   - Else apply heuristic replaces derived from packet `EXACT_STRING_REPLACE` / `AST_PARAM_RENAME` (skipped on ignored files; contract-constant lines preserved)  
 3. Re-run tests  
 4. If still failing after retries → `conduit run` aborts PR creation (exit code 2)
+
+### Dynamic ignore list
+
+Heuristics and LLMs share [`repair_ignore.build_ignore_list`](../conduit/src/conduit/repair_ignore.py):
+
+| Source | Example |
+|--------|---------|
+| Packet `ignore` | `"ignore": { "globs": ["**/policy.py"], "paths": [], "patterns": [] }` |
+| Consumer `.conduit/ignore.json` | Same shape as packet `ignore` |
+| Auto | Files that define `LEGACY_` / `FORBIDDEN_` / `EXPECTED_` / `ALLOWED_` / `MODERN_` constants whose values appear in packet match/old_param strings |
+
+Ignored files are omitted from LLM context and heuristic scans. With `-v`, Conduit prints the ignore list at the start of self-correct.
 
 With `--verbose` / `-v`, each attempt also prints:
 

@@ -32,6 +32,25 @@
       }
     },
     "notes": { "type": ["string", "null"] },
+    "ignore": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Paths/globs/patterns heuristics and LLMs must not rewrite (contract oracles).",
+      "properties": {
+        "globs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "patterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
     "rules": {
       "type": "array",
       "items": { "$ref": "#/$defs/rule" }

@@ -13,11 +13,18 @@ Schema: [`schema/conduit-packet.schema.json`](../schema/conduit-packet.schema.js
   "ecosystem": "pypi",
   "from_version": "0.28.1",
   "to_version": "1.40.0",
-  "sources": [{ "url": "https://…", "kind": "docs" }],
-  "notes": "Optional human notes",
+  "sources": [ { "url": "…", "kind": "docs" } ],
+  "notes": "optional",
+  "ignore": {
+    "globs": ["**/policy.py"],
+    "paths": [],
+    "patterns": []
+  },
   "rules": [ /* see Codemods */ ]
 }
 ```
+
+Optional `ignore` protects migration-contract files/patterns from self-correct heuristics and LLMs (also auto-merged with `.conduit/ignore.json` and discovered `LEGACY_`/`FORBIDDEN_` fixtures). See [Testing & self-correction](testing-and-self-correct.md).
 
 `ecosystem` is one of: `pypi`, `npm`, `go`, `maven`, `other`.
 

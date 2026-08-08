@@ -225,7 +225,9 @@ _EVIDENCE_SYSTEM = (
     "do not assume ChatCompletion vs chat.completions. "
     "If a removed endpoint/param has no stated successor, mention it in notes and do NOT "
     "invent replace/new_callee/new_param. "
-    "Do not invent model ids."
+    "Do not invent model ids. "
+    "Honor any ignore list: do not emit rules whose only effect would be rewriting "
+    "ignored contract patterns/files (LEGACY_/FORBIDDEN_ oracles)."
 )
 
 
@@ -344,6 +346,7 @@ def synthesize_from_evidence(
     ecosystem: str,
     signals: list[ChangeSignal],
     base: dict[str, Any],
+    root: Path | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Fetch evidence + LLM-author rules; merge onto base packet.
@@ -351,6 +354,7 @@ def synthesize_from_evidence(
     """
     from conduit.llm import get_llm_client
     from conduit.packet.evidence import build_evidence, evidence_as_prompt_text
+    from conduit.repair_ignore import build_ignore_list
 
     warnings: list[str] = []
     client = get_llm_client()
@@ -374,6 +378,10 @@ def synthesize_from_evidence(
     if not docs:
         return base, warnings
 
+    ignore_payload: dict[str, Any] = {}
+    if root is not None:
+        ignore_payload = build_ignore_list(root, base).to_prompt_dict()
+
     evidence_text = evidence_as_prompt_text(docs)
     user_payload = {
         "package": package,
@@ -382,6 +390,7 @@ def synthesize_from_evidence(
         "ecosystem": ecosystem,
         "detect_signals": _signal_summary(signals, package),
         "existing_rule_count": len(base.get("rules") or []),
+        "ignore": ignore_payload,
         "evidence": evidence_text,
     }
     try:
@@ -604,6 +613,7 @@ def ensure_packet(
             ecosystem=str(packet.get("ecosystem") or eco),
             signals=signals,
             base=packet,
+            root=root,
         )
         warnings.extend(enrich_warnings)
         _apply_versions(
