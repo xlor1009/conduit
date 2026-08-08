@@ -18,6 +18,14 @@ RENAME_RE = re.compile(
     r"(?P<new>\b[a-z_][a-z0-9_]*)",
     re.IGNORECASE,
 )
+# "Deprecated the Chat Completions <param> parameter in favor of <new>"
+DEPRECATED_PARAM_RE = re.compile(
+    r"[Dd]eprecat(?:ed|ing)\s+the\s+(?:Chat Completions\s+)?"
+    r"(?P<old>`?[a-z_][a-z0-9_]*`?)\s+parameter\s+"
+    r"(?:in favor of|replaced by|renamed to)\s+"
+    r"(?P<new>`?[a-z_][a-z0-9_]*`?)",
+    re.IGNORECASE,
+)
 MIGRATE_RE = re.compile(
     r"[Mm]igrate(?:\s+from)?\s+(?P<old>`?[a-zA-Z0-9._-]+`?)\s+to\s+"
     r"(?P<new>`?[a-zA-Z0-9._-]+`?)"
@@ -46,6 +54,27 @@ def parse_changelog_text(text: str, source_url: str | None = None) -> list[RawSi
                 replacement_pattern=new_p,
                 source_url=source_url,
                 description=f"Parameter renamed: {old_p} -> {new_p}",
+                extra={
+                    "old_param": old_p,
+                    "new_param": new_p,
+                    "function_target": "openai.chat.completions.create",
+                },
+            )
+        )
+
+    for match in DEPRECATED_PARAM_RE.finditer(text):
+        old_p, new_p = _strip_ticks(match.group("old")), _strip_ticks(match.group("new"))
+        if old_p == new_p:
+            continue
+        signals.append(
+            RawSignal(
+                vendor="openai",
+                change_type=ChangeType.PARAM_RENAME,
+                severity=Severity.CRITICAL,
+                affected_pattern=old_p,
+                replacement_pattern=new_p,
+                source_url=source_url,
+                description=f"Parameter deprecated: {old_p} -> {new_p}",
                 extra={
                     "old_param": old_p,
                     "new_param": new_p,
@@ -145,13 +174,15 @@ class ChangelogParserWorker(Worker):
                 signals.extend(parse_changelog_text(blob, link))
         else:
             try:
-                resp = httpx.get(CHANGELOG_URL, timeout=30.0, follow_redirects=True)
+                resp = httpx.get(CHANGELOG_URL, timeout=45.0, follow_redirects=True)
                 resp.raise_for_status()
-                blob = resp.text
-                blobs.append(blob)
-                signals.extend(parse_changelog_text(blob, CHANGELOG_URL))
-            except httpx.HTTPError:
-                return []
+                from bs4 import BeautifulSoup
+
+                text = BeautifulSoup(resp.text, "html.parser").get_text("\n", strip=True)
+                blobs.append(text)
+                signals.extend(parse_changelog_text(text, str(resp.url)))
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"changelog fetch failed: {exc}") from exc
 
         from conduit.llm import get_llm_client
 

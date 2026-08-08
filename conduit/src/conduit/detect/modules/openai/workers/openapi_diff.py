@@ -16,10 +16,20 @@ from conduit.detect.modules.openai.workers.base import Worker, fixtures_dir
 
 
 def _load_openapi(path: Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8")
-    if path.suffix.lower() in {".yaml", ".yml"}:
-        return yaml.safe_load(text)
-    return json.loads(text)
+    text = path.read_text(encoding="utf-8").lstrip("\ufeff").strip()
+    if not text:
+        raise ValueError(f"empty OpenAPI file: {path}")
+    suffix = path.suffix.lower()
+    if suffix in {".yaml", ".yml"} or text[:1] not in "[{":
+        data = yaml.safe_load(text)
+    else:
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            data = yaml.safe_load(text)
+    if not isinstance(data, dict):
+        raise ValueError(f"OpenAPI root must be a mapping: {path}")
+    return data
 
 
 def _diff_paths(previous: dict[str, Any], latest: dict[str, Any]) -> list[RawSignal]:
@@ -179,7 +189,8 @@ class OpenAPIDiffWorker(Worker):
                 return []
             latest = candidates[0]
             rel = latest.relative_to(repo_path).as_posix()
-            prev_tmp = tmp_path / "previous-openapi"
+            # Preserve suffix so loaders sniff yaml vs json correctly
+            prev_tmp = tmp_path / f"previous-{latest.name}"
             try:
                 shown = subprocess.run(
                     ["git", "show", f"HEAD~1:{rel}"],

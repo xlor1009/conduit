@@ -16,6 +16,7 @@ from conduit.detect.modules.discovery import load_modules
 class DetectResult:
     signals: list[ChangeSignal] = field(default_factory=list)
     installed: dict[str, str] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def packages(self) -> set[str]:
@@ -35,6 +36,7 @@ def run_detect(
     root = root.resolve()
     installed = read_installed(root)
     signals: list[ChangeSignal] = []
+    warnings: list[str] = []
 
     if not skip_lockfile:
         for jump in detect_lockfile_jumps(
@@ -58,7 +60,9 @@ def run_detect(
                 continue
             try:
                 signals.extend(mod.run(ctx))
-            except Exception:
-                continue
+            except Exception as exc:
+                warnings.append(f"detect module {mod.name}: {exc}")
+            warnings.extend(list(ctx.extra.get("warnings") or []))
+            ctx.extra["warnings"] = []
 
-    return DetectResult(signals=signals, installed=installed)
+    return DetectResult(signals=signals, installed=installed, warnings=warnings)

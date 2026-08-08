@@ -436,3 +436,40 @@ def test_self_correct_stops_early_when_heuristic_noop(tmp_path: Path, monkeypatc
     joined = "\n".join(logs)
     assert "stopping early" in joined
     assert "no remaining occurrences of ''max_tokens''" in joined or "no remaining occurrences of 'max_tokens'" in joined
+
+
+def test_parse_live_deprecation_tables():
+    from conduit.detect.modules.openai.workers.deprecation_scraper import parse_deprecation_html
+
+    html = """
+    <table>
+      <tr><th>Shutdown date</th><th>Model / system</th><th>Recommended replacement</th></tr>
+      <tr><td>Oct 23, 2026</td><td>gpt-4-0613</td><td>gpt-5.6-sol</td></tr>
+      <tr><td>2026-05-12</td><td>dall-e-2</td><td>gpt-image-2 , gpt-image-1</td></tr>
+      <tr><td>2022-12-03</td><td>/v1/engines</td><td>/v1/models</td></tr>
+      <tr><td>2026-09-24</td><td>Videos API</td><td>---</td></tr>
+    </table>
+    """
+    signals = parse_deprecation_html(html, "https://example.test/deprecations")
+    by = {s.affected_pattern: s for s in signals}
+    assert by["gpt-4-0613"].replacement_pattern == "gpt-5.6-sol"
+    assert by["dall-e-2"].replacement_pattern == "gpt-image-2"
+    assert by["/v1/engines"].replacement_pattern == "/v1/models"
+    assert "Videos API" not in by
+
+
+def test_parse_fixture_deprecation_still_works():
+    from conduit.detect.modules.openai.workers.deprecation_scraper import DeprecationScraperWorker
+
+    signals = DeprecationScraperWorker().run(demo=True)
+    assert len(signals) == 3
+    assert any(s.affected_pattern == "gpt-4-0613" for s in signals)
+
+
+def test_openapi_load_sniffs_yaml_without_suffix(tmp_path: Path):
+    from conduit.detect.modules.openai.workers.openapi_diff import _load_openapi
+
+    path = tmp_path / "previous-openapi"
+    path.write_text("openapi: 3.0.0\npaths: {}\n", encoding="utf-8")
+    data = _load_openapi(path)
+    assert data["openapi"] == "3.0.0"

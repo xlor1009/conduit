@@ -162,6 +162,9 @@ def detect_cmd(
         table.add_row(s.source, s.package, s.change_type, detail[:80])
     console.print(table)
     console.print(f"[bold]{len(result.signals)}[/bold] signal(s).")
+    for warning in result.warnings:
+        console.print(f"[yellow]Warning:[/yellow] {warning}")
+        _vprint(warning)
     raise typer.Exit(0 if result.signals else 1)
 
 
@@ -272,6 +275,17 @@ def run_cmd(
         skip_lockfile=skip_lockfile,
         demo=demo,
     )
+    for warning in detected.warnings:
+        console.print(f"[yellow]Warning:[/yellow] {warning}")
+        _vprint(warning)
+    if _VERBOSE:
+        by_type: dict[str, int] = {}
+        for s in detected.signals:
+            by_type[s.change_type] = by_type.get(s.change_type, 0) + 1
+        _vprint(
+            "detect signals: "
+            + (", ".join(f"{k}={v}" for k, v in sorted(by_type.items())) or "(none)")
+        )
     pkg = _pick_package(detected.signals, pkg_hint)
 
     if packet_file is not None:
